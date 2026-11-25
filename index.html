@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Dunia Dino Kecil</title>
+<style>
+/* ===== Dasar: cegah zoom, scroll, seleksi ===== */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;font-family:sans-serif}
+body{background:linear-gradient(#bfe9ff,#e8fbd8);}
+#stage{position:fixed;inset:0;overflow:hidden;touch-action:none}
+svg{display:block;overflow:visible}
+.btn{position:absolute;min-width:96px;min-height:96px;border:none;border-radius:50%;background:#fff;box-shadow:0 6px 0 rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .1s}
+.btn:active{transform:scale(.92)}
+.center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+/* Tombol rumah orang tua */
+#home{position:fixed;left:14px;top:14px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.6);z-index:50;display:none;align-items:center;justify-content:center;touch-action:none}
+#home svg.ring{position:absolute;inset:0}
+#home circle.prog{stroke-dasharray:189;stroke-dashoffset:189;transition:none}
+#home.hold circle.prog{stroke-dashoffset:0;transition:stroke-dashoffset 2s linear}
+/* Grid umum */
+.grid{position:absolute;inset:90px 24px 24px;display:grid;gap:18px;align-items:center;justify-items:center}
+/* Animasi */
+@keyframes jump{0%,100%{transform:translateY(0)}30%{transform:translateY(-22%) scale(1.05,.95)}60%{transform:translateY(0) scale(1.05,.95)}}
+@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
+@keyframes dance{0%,100%{transform:rotate(0) translateY(0)}25%{transform:rotate(-12deg) translateY(-10%)}50%{transform:rotate(0)}75%{transform:rotate(12deg) translateY(-10%)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6%)}75%{transform:translateX(6%)}}
+@keyframes jiggle{0%,100%{transform:scale(1)}20%{transform:scale(1.08,.92)}40%{transform:scale(.94,1.06)}60%{transform:scale(1.05,.95)}80%{transform:scale(.97,1.03)}}
+@keyframes pop{0%{transform:scale(0)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes fly{to{transform:translate(var(--dx),var(--dy)) rotate(360deg);opacity:0}}
+@keyframes zzz{0%{opacity:0;transform:translate(0,0) scale(.5)}30%{opacity:1}100%{opacity:0;transform:translate(40px,-120px) scale(1.4)}}
+@keyframes burst{from{r:0}to{r:400}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.jump{animation:jump .6s ease 3}
+.wiggle{animation:wiggle .5s ease 2}
+.dance{animation:dance .8s ease infinite}
+.shake{animation:shake .4s ease 2}
+.jiggle{animation:jiggle .5s ease 2}
+.popin{animation:pop .3s ease-out}
+.breathe{animation:breathe 2.5s ease infinite}
+.sparkle{position:fixed;pointer-events:none;z-index:40;animation:fly .9s ease-out forwards;font-size:0}
+.zz{position:absolute;font:bold 48px sans-serif;color:#5c6bc0;animation:zzz 2s ease-out infinite;pointer-events:none}
+.drag{position:absolute;touch-action:none;cursor:grab;transition:none}
+.home-back{transition:left .5s ease,top .5s ease}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<!-- Tombol rumah: tahan 2 detik -->
+<div id="home">
+  <svg class="ring" viewBox="0 0 64 64"><circle class="prog" cx="32" cy="32" r="30" fill="none" stroke="#ff7043" stroke-width="4" transform="rotate(-90 32 32)"/></svg>
+  <svg width="34" height="34" viewBox="0 0 34 34"><path d="M4 17 L17 5 L30 17 V30 H4Z" fill="#ff8a65" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><rect x="13" y="20" width="8" height="10" rx="3" fill="#fff"/></svg>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   SISTEM SUARA (Web Audio + speechSynthesis id-ID)
+   ========================================================= */
+let AC = null;
+function audioInit(){ if(!AC){ AC = new (window.AudioContext||window.webkitAudioContext)(); } if(AC.state==='suspended') AC.resume(); }
+// Nada sederhana
+function tone(f, dur=.15, type='sine', vol=.25, delay=0, f2){
+  if(!AC) return;
+  const t=AC.currentTime+delay, o=AC.createOscillator(), g=AC.createGain();
+  o.type=type; o.frequency.setValueAtTime(f,t);
+  if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+.01);
+  g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t+dur+.05);
+}
+// Efek-efek bersama
+const SFX={
+  tap(){ tone(660,.12,'sine',.25,0,990); },
+  pop(){ tone(500,.1,'sine',.3,0,1400); },
+  boing(){ tone(220,.3,'triangle',.3,0,660); },
+  chime(){ [784,988,1175,1568].forEach((f,i)=>tone(f,.25,'sine',.2,i*.08)); },
+  chew(){ for(let i=0;i<4;i++) tone(180+i*20,.08,'triangle',.25,i*.18); },
+  crack(){ tone(900,.06,'square',.12,0,300); },
+  giggle(){ [880,1046,880,1046,1318].forEach((f,i)=>tone(f,.09,'sine',.2,i*.09)); },
+  clap(){ if(!AC) return; for(let k=0;k<6;k++){ const t=AC.currentTime+k*.13, b=AC.createBuffer(1,AC.sampleRate*.08,AC.sampleRate), d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length); const s=AC.createBufferSource(), g=AC.createGain(); g.gain.value=.3; s.buffer=b; s.connect(g).connect(AC.destination); s.start(t);} },
+  // Lagu ceria pendek
+  song(){ BGM.duck(2000); [523,659,784,659,880,784,659,784,1046].forEach((f,i)=>tone(f,.22,'triangle',.18,i*.2)); },
+  // Lagu pengantar tidur (Nina Bobo sederhana)
+  lullaby(){ BGM.duck(5500); [392,330,392,330,349,392,349,330,294,262].forEach((f,i)=>tone(f,.55,'sine',.15,i*.5)); }
+};
+/* ===== BGM: lagu ceria berulang, disintesis Web Audio =====
+   Dijadwalkan per ketukan dengan lookahead agar tempo stabil. */
+const BGM={
+  gain:null, on:false, step:0, next:0, id:null, bpm:104,
+  // Melodi pentatonik C (0 = diam), 32 ketukan setengah
+  mel:[523,0,659,784, 659,0,523,587, 659,0,784,880, 784,0,659,0,
+       587,0,659,523, 440,0,523,587, 659,0,587,523, 392,0,523,0],
+  bass:[131,196,175,196, 131,196,147,196],
+  start(){
+    if(!AC||this.on) return; this.on=true;
+    if(!this.gain){ this.gain=AC.createGain(); this.gain.gain.value=.07; this.gain.connect(AC.destination); }
+    this.next=AC.currentTime+.1; this.step=0;
+    this.id=setInterval(()=>this.tick(),50);
+  },
+  tick(){
+    const dur=60/this.bpm/2;
+    while(this.next<AC.currentTime+.2){
+      const f=this.mel[this.step%this.mel.length], t=this.next;
+      if(f) this.note(f,t,dur*.9,'triangle',1);
+      if(this.step%4===0) this.note(this.bass[(this.step/4)%this.bass.length],t,dur*3.5,'sine',1.4);
+      this.step++; this.next+=dur;
+    }
+  },
+  note(f,t,d,type,v){
+    const o=AC.createOscillator(), g=AC.createGain(); o.type=type; o.frequency.value=f;
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+.02); g.gain.exponentialRampToValueAtTime(.001,t+d);
+    o.connect(g).connect(this.gain); o.start(t); o.stop(t+d+.05);
+  },
+  // Kecilkan sementara (saat lagu/efek panjang), lalu kembali
+  duck(ms){ if(!this.gain) return; const g=this.gain.gain, t=AC.currentTime; g.cancelScheduledValues(t); g.setTargetAtTime(.012,t,.1); g.setTargetAtTime(.07,t+ms/1000,.4); }
+};
+// Hentikan suara saat tab/aplikasi disembunyikan
+document.addEventListener('visibilitychange',()=>{ if(AC) document.hidden?AC.suspend():AC.resume(); });
+
+// Ucapkan teks bahasa Indonesia (nada ceria)
+function say(text, pitch=1.4, rate=.9){
+  if(!('speechSynthesis' in window)) return;
+  BGM.duck(1500); // BGM mengecil agar ucapan jelas
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text); u.lang='id-ID'; u.pitch=pitch; u.rate=rate;
+  const v=speechSynthesis.getVoices().find(v=>v.lang.replace('_','-').startsWith('id')); if(v) u.voice=v;
+  speechSynthesis.speak(u);
+}
+
+/* =========================================================
+   DATA & GAMBAR KARAKTER (SVG, bulat, mata besar)
+   ========================================================= */
+const AN={
+  singa:{c:'#FFC04D',snd:'aum aum'}, gajah:{c:'#A9BCE0',snd:'tuuuut'},
+  bebek:{c:'#FFE44D',snd:'kwek kwek'}, kucing:{c:'#FFB0D0',snd:'meong'},
+  sapi:{c:'#FFFFFF',snd:'mooo'}, monyet:{c:'#C8935F',snd:'uuk aak aak'},
+  kelinci:{c:'#F1E4FA',snd:'ciit ciit'}, anjing:{c:'#E7B57E',snd:'guk guk'},
+  trex:{c:'#7ED957',snd:'raawr'}, tri:{c:'#FF9A70',snd:'grooo'},
+  brachio:{c:'#6EC1FF',snd:'huuum'}, stego:{c:'#C58BE0',snd:'grrr grrr'}
+};
+const ANIMALS=['singa','gajah','bebek','kucing','sapi','monyet','kelinci','anjing'];
+const DINOS=['trex','tri','brachio','stego'];
+const ALL=ANIMALS.concat(DINOS);
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(v=>v[1]);
+// Gelap sedikit untuk aksen
+function dark(hex,p=.75){const n=parseInt(hex.slice(1),16);return `rgb(${(n>>16)*p|0},${(n>>8&255)*p|0},${(n&255)*p|0})`;}
+
+/* animalSVG(jenis, ukuran, opsi) -> string SVG. opsi.mouth: 'smile'|'open'|'chew', opsi.sleep, opsi.shell */
+function animalSVG(k,size=160,o={}){
+  const c=AN[k].c, d=dark(c), isDino=DINOS.includes(k);
+  let back='',front='',hy=40;
+  if(k==='brachio') hy=26;
+  switch(k){
+    case 'singa': back=`<circle cx="50" cy="40" r="34" fill="#E8862E"/>`; break;
+    case 'gajah': back=`<ellipse cx="20" cy="42" rx="17" ry="20" fill="${d}"/><ellipse cx="80" cy="42" rx="17" ry="20" fill="${d}"/>`;
+      front=`<path d="M50 50 Q52 66 60 70" stroke="${c}" stroke-width="10" fill="none" stroke-linecap="round"/>`; break;
+    case 'kucing': back=`<ellipse cx="32" cy="20" rx="9" ry="14" fill="${c}" transform="rotate(-20 32 20)"/><ellipse cx="68" cy="20" rx="9" ry="14" fill="${c}" transform="rotate(20 68 20)"/>`;
+      front=`<path d="M22 50 H34 M66 50 H78" stroke="#555" stroke-width="2" stroke-linecap="round"/>`; break;
+    case 'sapi': back=`<ellipse cx="22" cy="30" rx="12" ry="6" fill="#ffd1dc"/><ellipse cx="78" cy="30" rx="12" ry="6" fill="#ffd1dc"/><circle cx="38" cy="16" r="5" fill="#f5deb3"/><circle cx="62" cy="16" r="5" fill="#f5deb3"/>`;
+      front=`<ellipse cx="62" cy="76" rx="9" ry="6" fill="#444"/><ellipse cx="36" cy="30" rx="7" ry="5" fill="#444"/>`; break;
+    case 'monyet': back=`<circle cx="22" cy="42" r="11" fill="${c}"/><circle cx="78" cy="42" r="11" fill="${c}"/><circle cx="22" cy="42" r="6" fill="#F6D3A8"/><circle cx="78" cy="42" r="6" fill="#F6D3A8"/>`;
+      front=``; break;
+    case 'kelinci': back=`<ellipse cx="38" cy="10" rx="8" ry="20" fill="${c}"/><ellipse cx="62" cy="10" rx="8" ry="20" fill="${c}"/><ellipse cx="38" cy="10" rx="4" ry="14" fill="#ffc0d9"/><ellipse cx="62" cy="10" rx="4" ry="14" fill="#ffc0d9"/>`; break;
+    case 'anjing': back=``; front=`<ellipse cx="24" cy="44" rx="9" ry="17" fill="${d}"/><ellipse cx="76" cy="44" rx="9" ry="17" fill="${d}"/>`; break;
+    case 'trex': back=`<ellipse cx="84" cy="80" rx="18" ry="9" fill="${c}" transform="rotate(-20 84 80)"/>`; front=`<ellipse cx="34" cy="68" rx="5" ry="3" fill="${d}"/><ellipse cx="66" cy="68" rx="5" ry="3" fill="${d}"/>`; break;
+    case 'tri': back=`<ellipse cx="84" cy="80" rx="16" ry="8" fill="${c}"/><path d="M18 40 A32 32 0 0 1 82 40Z" fill="${d}"/>`; front=`<circle cx="50" cy="22" r="4" fill="#fff5d6"/><circle cx="38" cy="25" r="4" fill="#fff5d6"/><circle cx="62" cy="25" r="4" fill="#fff5d6"/>`; break;
+    case 'brachio': back=`<ellipse cx="86" cy="82" rx="16" ry="7" fill="${c}"/><rect x="40" y="30" width="20" height="40" rx="10" fill="${c}"/>`; break;
+    case 'stego': back=`<ellipse cx="86" cy="80" rx="16" ry="8" fill="${c}"/>`+[26,40,56,72].map((x,i)=>`<circle cx="${x}" cy="${54-(i%2)*4}" r="8" fill="#FFB74D"/>`).join(''); break;
+  }
+  // Mulut
+  let mouth;
+  if(k==='bebek') mouth=o.mouth==='open'?`<ellipse cx="50" cy="${hy+14}" rx="13" ry="9" fill="#FF8F00"/><ellipse cx="50" cy="${hy+15}" rx="7" ry="5" fill="#b33"/>`:`<ellipse cx="50" cy="${hy+13}" rx="13" ry="6" fill="#FF8F00"/>`;
+  else if(o.mouth==='open') mouth=`<ellipse cx="50" cy="${hy+14}" rx="9" ry="8" fill="#a33"/><ellipse cx="50" cy="${hy+18}" rx="5" ry="3" fill="#ff7b9c"/>`;
+  else if(o.mouth==='chew') mouth=`<ellipse cx="50" cy="${hy+14}" rx="7" ry="3" fill="#a33"/>`;
+  else mouth=`<path d="M40 ${hy+12} Q50 ${hy+22} 60 ${hy+12}" stroke="#663" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+  if(k==='monyet') mouth=`<ellipse cx="50" cy="${hy+10}" rx="16" ry="12" fill="#F6D3A8"/>`+mouth;
+  // Mata (besar) atau tidur
+  const eyes=o.sleep
+    ?`<path d="M34 ${hy} Q40 ${hy+5} 46 ${hy} M54 ${hy} Q60 ${hy+5} 66 ${hy}" stroke="#333" stroke-width="3" fill="none" stroke-linecap="round"/>`
+    :`<circle cx="39" cy="${hy-2}" r="8" fill="#fff"/><circle cx="61" cy="${hy-2}" r="8" fill="#fff"/><circle cx="40" cy="${hy-1}" r="5" fill="#222"/><circle cx="62" cy="${hy-1}" r="5" fill="#222"/><circle cx="42" cy="${hy-3}" r="2" fill="#fff"/><circle cx="64" cy="${hy-3}" r="2" fill="#fff"/>`;
+  const shell=o.shell?`<path d="M30 ${hy-18} Q50 ${hy-40} 70 ${hy-18} L64 ${hy-22} L58 ${hy-16} L50 ${hy-22} L42 ${hy-16} L36 ${hy-22}Z" fill="#FFF8E1" stroke="#E0C080" stroke-width="2" stroke-linejoin="round"/>`:'';
+  const belly=`<ellipse class="belly" cx="50" cy="76" rx="${isDino?18:16}" ry="14" fill="rgba(255,255,255,.45)"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="-5 -15 110 115"><g class="body">${back}
+    <ellipse cx="50" cy="74" rx="30" ry="24" fill="${c}" stroke="${d}" stroke-width="2"/>${belly}
+    <ellipse cx="36" cy="95" rx="9" ry="5" fill="${d}"/><ellipse cx="64" cy="95" rx="9" ry="5" fill="${d}"/>
+    <circle cx="50" cy="${hy}" r="26" fill="${c}" stroke="${d}" stroke-width="2"/>${front}
+    <circle cx="30" cy="${hy+10}" r="5" fill="#ff9eb5" opacity=".6"/><circle cx="70" cy="${hy+10}" r="5" fill="#ff9eb5" opacity=".6"/>
+    ${eyes}${mouth}${shell}</g></svg>`;
+}
+// Suara binatang: nada lucu + ucapan
+function animalSound(k){ SFX.boing(); setTimeout(()=>say(AN[k].snd,1.5),120); }
+
+/* =========================================================
+   UTILITAS BERSAMA: timer terkelola, efek bintang, drag
+   ========================================================= */
+let timers=[], rafs=[], cleanups=[], lastTouch=Date.now();
+const T=(fn,ms)=>{const id=setTimeout(fn,ms);timers.push(id);return id;};
+const I=(fn,ms)=>{const id=setInterval(fn,ms);timers.push(id);return id;};
+function clearAll(){ timers.forEach(id=>{clearTimeout(id);clearInterval(id);}); rafs.forEach(cancelAnimationFrame); cleanups.forEach(f=>f()); timers=[];rafs=[];cleanups=[]; if(window.speechSynthesis) speechSynthesis.cancel(); }
+const stage=document.getElementById('stage');
+function el(tag,css,html){const e=document.createElement(tag);if(css)e.style.cssText=css;if(html!=null)e.innerHTML=html;return e;}
+// Animasi ulang (restart class)
+function anim(e,cls,ms){e.classList.remove('jump','wiggle','dance','shake','jiggle','popin');void e.offsetWidth;e.classList.add(cls);if(ms)T(()=>e.classList.remove(cls),ms);}
+// Percikan bintang/konfeti di titik (x,y)
+const COLORS=['#FF5E7E','#FFC93C','#4FC3F7','#7ED957','#B388FF','#FF8A65'];
+function stars(x,y,n=12){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, r=80+Math.random()*120, s=el('div');
+    s.className='sparkle'; s.style.cssText+=`left:${x-12}px;top:${y-12}px;--dx:${Math.cos(a)*r}px;--dy:${Math.sin(a)*r}px`;
+    s.innerHTML=`<svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="${rnd(COLORS)}" stroke-linejoin="round" stroke="#fff" stroke-width="1"/></svg>`;
+    document.body.appendChild(s); setTimeout(()=>s.remove(),950);
+  }
+}
+const ctr=e=>{const r=e.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];};
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+// Elemen yang bisa diseret. onDrop(cx,cy) -> true jika diterima; jika false kembali pelan
+function draggable(e,onDrop){
+  let sx,sy,ox,oy,id=null;
+  e.classList.add('drag');
+  e.addEventListener('pointerdown',ev=>{
+    if(id!==null) return; id=ev.pointerId; e.setPointerCapture(id);
+    e.classList.remove('home-back'); sx=ev.clientX; sy=ev.clientY; ox=e.offsetLeft; oy=e.offsetTop;
+    e.dataset.hx=e.dataset.hx||ox; e.dataset.hy=e.dataset.hy||oy;
+    e.style.zIndex=20; e.style.transform='scale(1.15)'; SFX.tap();
+  });
+  e.addEventListener('pointermove',ev=>{ if(ev.pointerId!==id) return; e.style.left=ox+ev.clientX-sx+'px'; e.style.top=oy+ev.clientY-sy+'px'; });
+  const up=ev=>{
+    if(ev.pointerId!==id) return; id=null; e.style.transform=''; e.style.zIndex=5;
+    const [cx,cy]=ctr(e);
+    if(!onDrop(cx,cy)){ e.classList.add('home-back'); e.style.left=e.dataset.hx+'px'; e.style.top=e.dataset.hy+'px'; }
+  };
+  e.addEventListener('pointerup',up); e.addEventListener('pointercancel',up);
+}
+// Pengecil ukuran sesuai layar
+const vmin=()=>Math.min(innerWidth,innerHeight);
+
+/* =========================================================
+   NAVIGASI: layar mulai, menu, tombol rumah
+   ========================================================= */
+const home=document.getElementById('home');
+let holdT=null;
+home.addEventListener('pointerdown',e=>{ e.stopPropagation(); home.classList.add('hold'); holdT=setTimeout(()=>{ home.classList.remove('hold'); SFX.chime(); showMenu(); },2000); });
+['pointerup','pointerleave','pointercancel'].forEach(t=>home.addEventListener(t,()=>{ clearTimeout(holdT); home.classList.remove('hold'); }));
+document.addEventListener('pointerdown',()=>{ lastTouch=Date.now(); },true);
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('gesturestart',e=>e.preventDefault());
+document.addEventListener('touchmove',e=>{ if(e.touches.length>1) e.preventDefault(); },{passive:false});
+
+function scene(bg){ clearAll(); stage.innerHTML=''; stage.style.background=bg||''; }
+
+// Layar awal: satu tombol "mulai" bergambar (segitiga play + dino)
+function showStart(){
+  scene('linear-gradient(#bfe9ff,#e8fbd8)'); home.style.display='none';
+  const s=Math.min(vmin()*.55,300);
+  const b=el('button',`width:${s}px;height:${s}px;background:#FFC93C;border-radius:50%`,
+    `<svg width="${s*.8}" height="${s*.8}" viewBox="0 0 100 100"><path d="M36 26 Q36 18 44 22 L76 44 Q82 50 76 56 L44 78 Q36 82 36 74Z" fill="#fff"/></svg>`);
+  b.className='btn center breathe';
+  const d=el('div',`position:absolute;left:50%;bottom:4%;transform:translateX(-50%)`,animalSVG('trex',Math.min(vmin()*.28,160)));
+  d.className='';
+  b.onclick=()=>{ audioInit(); BGM.start(); SFX.chime(); say('halo!'); showMenu(); };
+  stage.append(d,b); anim(d.firstChild,'dance');
+}
+
+// Menu utama: 8 ikon besar
+const GAMES=[
+  {ic:()=>iconBox('#FF8A65',animalSVG('singa',70)),run:gameZoo},
+  {ic:()=>iconBox('#FFF3C4',eggSVG(70,0)),run:gameEgg},
+  {ic:()=>iconBox('#81D4FA',`<svg width="70" height="70" viewBox="0 0 100 100"><path d="M20 40h15l20-18v56L35 60H20z" fill="#fff"/><path d="M66 34q12 16 0 32M76 26q20 24 0 48" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/></svg>`),run:gameSound},
+  {ic:()=>iconBox('#AED581',foodSVG('pisang',70)),run:gameFeed},
+  {ic:()=>iconBox('#B39DDB',`<div style="filter:brightness(0);opacity:.45">${animalSVG('gajah',70)}</div>`),run:gameShadow},
+  {ic:()=>iconBox('#F48FB1',`<svg width="70" height="70" viewBox="0 0 100 100"><circle cx="35" cy="38" r="18" fill="#FF5E7E"/><circle cx="62" cy="32" r="16" fill="#FFC93C"/><circle cx="50" cy="62" r="20" fill="#4FC3F7"/></svg>`),run:gameColor},
+  {ic:()=>iconBox('#FFCC80',doorSVG(70,'#8D6E63')),run:gamePeek},
+  {ic:()=>iconBox('#80DEEA',`<svg width="70" height="70" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="rgba(255,255,255,.5)" stroke="#fff" stroke-width="5"/><circle cx="36" cy="34" r="8" fill="#fff"/></svg>`),run:gameBubble}
+];
+function iconBox(bg,inner){return `<div style="width:100%;height:100%;border-radius:28px;background:${bg};display:flex;align-items:center;justify-content:center;box-shadow:0 8px 0 rgba(0,0,0,.12)">${inner}</div>`;}
+function showMenu(){
+  scene('linear-gradient(#bfe9ff,#e8fbd8)'); home.style.display='none';
+  const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
+  g.style.cssText+=`inset:24px;grid-template-columns:repeat(${land?4:2},1fr);grid-template-rows:repeat(${land?2:4},1fr)`;
+  const sz=Math.max(110,Math.min(land?innerWidth/5:innerWidth/2.6, land?innerHeight/2.6:innerHeight/5.2));
+  GAMES.forEach((G,i)=>{
+    const b=el('button',`position:relative;width:${sz}px;height:${sz}px;border:none;background:none;padding:0;cursor:pointer`,G.ic());
+    b.onpointerdown=()=>{ SFX.pop(); anim(b,'jiggle',600); };
+    b.onclick=()=>{ T(()=>{ scene(); home.style.display='flex'; G.run(); },250); };
+    g.appendChild(b); b.classList.add('popin');
+  });
+  stage.appendChild(g);
+}
+addEventListener('resize',()=>{ if(home.style.display==='none' && stage.querySelector('.grid')) showMenu(); });
+
+/* Gambar pendukung bersama */
+function eggSVG(s,cracks){
+  const cr=['M30 50 l8 6 l6 -8 l8 7','M55 40 l6 8 l8 -6 l6 6','M28 70 l10 -4 l6 6 l10 -5','M58 66 l6 6 l8 -6 l8 4','M40 30 l6 6 l8 -6'];
+  return `<svg width="${s}" height="${s}" viewBox="0 0 100 110"><ellipse cx="50" cy="60" rx="38" ry="46" fill="#FFF3C4" stroke="#E6C46A" stroke-width="3"/>
+  <circle cx="35" cy="45" r="7" fill="#7ED957"/><circle cx="62" cy="35" r="5" fill="#4FC3F7"/><circle cx="66" cy="72" r="8" fill="#FF8A65"/><circle cx="38" cy="82" r="5" fill="#B388FF"/>
+  ${cr.slice(0,cracks).map(p=>`<path d="${p}" stroke="#8D6E63" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</svg>`;
+}
+function foodSVG(k,s){
+  const f={
+    pisang:`<path d="M20 30 Q30 85 85 70 Q90 64 82 62 Q40 66 34 26Z" fill="#FFE14D" stroke="#C9A800" stroke-width="3" stroke-linejoin="round"/>`,
+    wortel:`<path d="M50 30 Q70 30 62 50 L52 92 Q50 96 48 92 L38 50 Q30 30 50 30Z" fill="#FF9800"/><ellipse cx="44" cy="20" rx="6" ry="14" fill="#66BB6A"/><ellipse cx="56" cy="20" rx="6" ry="14" fill="#43A047"/>`,
+    daun:`<path d="M50 90 Q10 60 30 20 Q60 10 75 30 Q90 70 50 90Z" fill="#66BB6A" stroke="#2E7D32" stroke-width="3"/><path d="M50 88 Q48 50 40 26" stroke="#2E7D32" stroke-width="3" fill="none" stroke-linecap="round"/>`,
+    rumput:`<ellipse cx="50" cy="85" rx="38" ry="10" fill="#8D6E63"/>`+[20,32,44,56,68,80].map((x,i)=>`<ellipse cx="${x}" cy="${55+(i%2)*6}" rx="6" ry="${28-(i%2)*6}" fill="${i%2?'#7CB342':'#9CCC65'}"/>`).join(''),
+    apel:`<circle cx="50" cy="58" r="32" fill="#FF5252"/><ellipse cx="62" cy="22" rx="10" ry="5" fill="#66BB6A"/><circle cx="40" cy="46" r="7" fill="#fff" opacity=".5"/>`
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 100 100">${f[k]}</svg>`;
+}
+function doorSVG(s,c){return `<svg width="${s}" height="${s}" viewBox="0 0 100 100"><rect x="18" y="10" width="64" height="86" rx="30" fill="${c}"/><circle cx="68" cy="56" r="6" fill="#FFD54F"/></svg>`;}
+
+/* =========================================================
+   1. KEBUN BINATANG KETUK-KETUK
+   ========================================================= */
+function gameZoo(){
+  scene('linear-gradient(#bfe9ff 40%,#9ee07a 40%)');
+  const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
+  g.style.cssText+=`grid-template-columns:repeat(${land?3:2},1fr)`;
+  const s=Math.max(110,Math.min(land?innerWidth/4.2:innerWidth/2.6,land?innerHeight/3:innerHeight/4.5));
+  const zooA=['singa','gajah','bebek','kucing','sapi','monyet'];
+  let last=null; const boxes=[];
+  for(let i=0;i<6;i++){
+    const b=el('div',`position:relative;width:${s}px;height:${s}px;cursor:pointer`);
+    // Semak bulat
+    const bush=el('div',`position:absolute;inset:0`,`<svg width="${s}" height="${s}" viewBox="0 0 100 100"><circle cx="30" cy="62" r="28" fill="${['#43A047','#66BB6A','#2E7D32'][i%3]}"/><circle cx="70" cy="62" r="28" fill="${['#66BB6A','#43A047','#388E3C'][i%3]}"/><circle cx="50" cy="40" r="30" fill="${['#7CB342','#81C784','#4CAF50'][i%3]}"/><circle cx="38" cy="36" r="5" fill="#FF8A80"/><circle cx="64" cy="54" r="5" fill="#FFD54F"/></svg>`);
+    const a=el('div',`position:absolute;left:0;right:0;bottom:30%;display:flex;justify-content:center;transform:scale(0);transition:transform .2s`);
+    b.append(a,bush); b.busy=false;
+    b.onpointerdown=()=>{
+      if(b.busy){ anim(a.firstChild,'jiggle'); SFX.giggle(); return; }
+      b.busy=true; let k; do k=rnd(zooA); while(k===last); last=k;
+      a.innerHTML=animalSVG(k,s*.9); a.style.transform='scale(1)'; a.style.zIndex=2; bush.style.zIndex=1;
+      anim(a.firstChild,'jump'); animalSound(k); const [x,y]=ctr(b); stars(x,y-s/3);
+      T(()=>{ a.style.transform='scale(0)'; b.busy=false; },3000);
+    };
+    boxes.push(b); g.appendChild(b);
+  }
+  stage.appendChild(g);
+  // Ajakan: semak bergoyang jika diam 10 detik
+  I(()=>{ if(Date.now()-lastTouch>10000){ anim(rnd(boxes.filter(b=>!b.busy)).lastChild,'wiggle',1000); tone(880,.1,'sine',.1); lastTouch=Date.now()-5000; } },1000);
+}
+
+/* =========================================================
+   2. TELUR DINO MENETAS
+   ========================================================= */
+function gameEgg(){
+  scene('linear-gradient(#FFF8E1,#C5E1A5)');
+  const s=Math.min(vmin()*.55,340);
+  let taps=0;
+  const wrap=el('div',`position:absolute;left:50%;top:42%;transform:translate(-50%,-50%)`);
+  const eg=el('div','',eggSVG(s,0)); wrap.appendChild(eg); stage.appendChild(wrap);
+  eg.onpointerdown=()=>{
+    taps++; SFX.crack(); tone(400+taps*80,.1,'triangle',.2);
+    eg.innerHTML=eggSVG(s,taps); anim(eg,'wiggle');
+    if(taps>=5) T(hatch,300);
+  };
+  function hatch(){
+    const k=rnd(DINOS), [x,y]=ctr(wrap); stars(x,y,20); SFX.chime(); SFX.clap();
+    wrap.innerHTML=''; const dino=el('div','position:relative',animalSVG(k,s,{shell:true})); wrap.appendChild(dino); anim(dino,'jump');
+    T(()=>animalSound(k),400);
+    let sleeping=false, zz=[];
+    // Ketuk perut: tertawa & bergetar
+    dino.onpointerdown=e=>{
+      if(sleeping) wake();
+      const r=dino.getBoundingClientRect(), yy=(e.clientY-r.top)/r.height;
+      if(yy>.55){ SFX.giggle(); say('hihihi',1.8,1.2); anim(dino,'jiggle'); } else { SFX.tap(); anim(dino,'wiggle'); }
+    };
+    // Makanan: apel & daun diseret ke mulut
+    const fs=Math.max(110,s*.32);
+    ['apel','daun'].forEach((f,i)=>{
+      const fe=el('div',`left:${i?innerWidth-fs-30:30}px;top:${innerHeight-fs-30}px;width:${fs}px;height:${fs}px`,foodSVG(f,fs));
+      stage.appendChild(fe);
+      draggable(fe,(cx,cy)=>{
+        const r=dino.getBoundingClientRect(), mouth=[r.left+r.width/2,r.top+r.height*.5];
+        if(dist([cx,cy],mouth)<150){
+          if(sleeping) wake();
+          fe.style.transition='transform .3s'; fe.style.transform='scale(0)';
+          dino.innerHTML=animalSVG(k,s,{shell:true,mouth:'chew'}); SFX.chew(); anim(dino,'jiggle');
+          T(()=>{ dino.innerHTML=animalSVG(k,s,{shell:true}); stars(mouth[0],mouth[1],8); animalSound(k); },900);
+          T(()=>{ fe.style.transition='none'; fe.style.left=fe.dataset.hx+'px'; fe.style.top=fe.dataset.hy+'px'; fe.style.transform='scale(0)'; requestAnimationFrame(()=>{fe.style.transition='transform .3s';fe.style.transform='';}); },1300);
+          return true;
+        } return false;
+      });
+    });
+    // Bulan: tidur
+    const moon=el('button',`right:30px;top:24px;width:110px;height:110px;background:#283593`,`<svg width="70" height="70" viewBox="0 0 100 100"><path d="M60 10 A40 40 0 1 0 90 66 A32 32 0 1 1 60 10Z" fill="#FFF59D"/></svg>`);
+    moon.className='btn'; stage.appendChild(moon);
+    moon.onpointerdown=()=>{
+      if(sleeping) return; sleeping=true; dino.innerHTML=animalSVG(k,s,{shell:true,sleep:true}); dino.classList.add('breathe');
+      stage.style.filter='brightness(.75)'; SFX.lullaby();
+      for(let i=0;i<3;i++){ const z=el('div',`left:${55+i*8}%;top:${-5}%;animation-delay:${i*.6}s`,'z'); z.className='zz'; wrap.appendChild(z); zz.push(z); }
+      T(()=>{ if(sleeping) wake(); },9000);
+    };
+    function wake(){ sleeping=false; stage.style.filter=''; dino.classList.remove('breathe'); zz.forEach(z=>z.remove()); zz=[]; dino.innerHTML=animalSVG(k,s,{shell:true}); }
+    // Telur baru
+    const again=el('button',`left:50%;bottom:24px;transform:translateX(-50%);width:110px;height:110px;background:#FFE082`,eggSVG(70,0));
+    again.className='btn'; stage.appendChild(again);
+    again.onclick=()=>{ SFX.pop(); stage.style.filter=''; gameEgg(); };
+  }
+  cleanups.push(()=>stage.style.filter='');
+}
+
+/* =========================================================
+   3. SIAPA SUARANYA?
+   ========================================================= */
+function gameSound(){
+  scene('linear-gradient(#E1F5FE,#B3E5FC)');
+  // Pilih tingkat: 2 titik / 3 titik
+  const dots=n=>`<svg width="90" height="40" viewBox="0 0 90 40">${[...Array(n)].map((_,i)=>`<circle cx="${45+(i-(n-1)/2)*28}" cy="20" r="11" fill="#fff"/>`).join('')}</svg>`;
+  const land=innerWidth>innerHeight;
+  [2,3].forEach((n,i)=>{
+    const b=el('button',`width:150px;height:150px;background:${i?'#FF8A65':'#7ED957'};left:calc(50% ${land?(i?'+ 40px':'- 190px'):'- 75px'});top:calc(50% ${land?'- 75px':(i?'+ 30px':'- 180px')})`,dots(n));
+    b.className='btn popin'; b.onclick=()=>{ SFX.pop(); play(n); }; stage.appendChild(b);
+  });
+  function play(n){
+    scene('linear-gradient(#E1F5FE,#B3E5FC)'); let q=0;
+    const replay=el('button',`left:50%;top:24px;transform:translateX(-50%);width:110px;height:110px;background:#4FC3F7`,GAMES[2].ic().replace(/border-radius:28px;background:#81D4FA/,'background:none'));
+    replay.className='btn'; stage.appendChild(replay);
+    const row=el('div',`position:absolute;left:0;right:0;top:150px;bottom:24px;display:flex;flex-direction:${innerWidth>innerHeight?'row':'column'};justify-content:space-evenly;align-items:center`);
+    stage.appendChild(row);
+    let ans;
+    replay.onclick=()=>animalSound(ans);
+    function ask(){
+      row.innerHTML=''; const opts=shuffle(ALL).slice(0,n); ans=rnd(opts);
+      const s=Math.max(120,Math.min((innerWidth>innerHeight?innerWidth/(n+1):innerHeight/(n+1.6)),240));
+      opts.forEach(k=>{
+        const c=el('div',`cursor:pointer`,animalSVG(k,s)); c.classList.add('popin'); row.appendChild(c);
+        c.onpointerdown=()=>{
+          if(row.locked) return;
+          if(k===ans){
+            row.locked=true; c.classList.remove('popin'); c.classList.add('dance'); SFX.clap(); SFX.chime(); const [x,y]=ctr(c); stars(x,y,16); animalSound(k);
+            T(()=>{ row.locked=false; q++; if(q>=5) party(); else ask(); },2200);
+          } else { anim(c,'shake',900); T(()=>animalSound(ans),500); }
+        };
+      });
+      T(()=>animalSound(ans),500);
+    }
+    function party(){
+      row.innerHTML=''; SFX.song(); SFX.clap();
+      shuffle(ALL).slice(0,3).forEach(k=>{ const c=el('div','',animalSVG(k,160)); c.className='dance'; row.appendChild(c); });
+      for(let i=0;i<5;i++) T(()=>stars(Math.random()*innerWidth,Math.random()*innerHeight,14),i*400);
+      T(()=>{ q=0; ask(); },4500);
+    }
+    ask();
+  }
+}
+
+/* =========================================================
+   4. BERI MAKAN BINATANG
+   ========================================================= */
+function gameFeed(){
+  scene('linear-gradient(#FFF9C4,#C5E1A5)');
+  const PAIRS=[['monyet','pisang'],['kelinci','wortel'],['trex','daun'],['sapi','rumput']];
+  let idx=Math.floor(Math.random()*4);
+  function round(){
+    stage.innerHTML='';
+    const [k,food]=PAIRS[idx], s=Math.min(vmin()*.5,320); let eaten=0;
+    const wrap=el('div',`position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);transition:transform .4s`);
+    const a=el('div','',animalSVG(k,s,{mouth:'open'})); wrap.appendChild(a); stage.appendChild(wrap); anim(a,'popin');
+    T(()=>animalSound(k),300);
+    const fs=Math.max(110,Math.min(innerWidth/4,150)), foods=shuffle([food,...shuffle(PAIRS.map(p=>p[1]).filter(f=>f!==food)).slice(0,2)]);
+    foods.forEach((f,i)=>{
+      const fe=el('div',`left:${innerWidth*(i+1)/4-fs/2}px;top:${innerHeight-fs-30}px;width:${fs}px;height:${fs}px`,foodSVG(f,fs));
+      stage.appendChild(fe);
+      draggable(fe,(cx,cy)=>{
+        const r=a.getBoundingClientRect(), mouth=[r.left+r.width/2,r.top+r.height*.55];
+        if(f!==food || dist([cx,cy],mouth)>150) return false;
+        // Masuk mulut (magnet)
+        fe.classList.add('home-back'); fe.style.left=mouth[0]-fs/2+'px'; fe.style.top=mouth[1]-fs/2+'px';
+        fe.style.transition+=',transform .4s'; fe.style.transform='scale(0)';
+        eaten++; a.innerHTML=animalSVG(k,s,{mouth:'chew'}); SFX.chew(); anim(a,'jiggle');
+        wrap.style.transform=`translate(-50%,-50%) scale(${1+eaten*.06})`;
+        T(()=>{ a.innerHTML=animalSVG(k,s,{mouth:eaten>=3?'smile':'open'}); animalSound(k); stars(mouth[0],mouth[1],8); },900);
+        T(()=>{ if(eaten<3){ fe.classList.remove('home-back'); fe.style.transition='none'; fe.style.left=fe.dataset.hx+'px'; fe.style.top=fe.dataset.hy+'px'; requestAnimationFrame(()=>{fe.style.transition='transform .3s';fe.style.transform='';}); } },1400);
+        if(eaten>=3) T(()=>{ a.classList.add('dance'); SFX.song(); const [x,y]=ctr(a); stars(x,y,20); T(()=>{ idx=(idx+1)%4; round(); },3500); },1500);
+        return true;
+      });
+    });
+  }
+  round();
+}
+
+/* =========================================================
+   5. PASANG BAYANGAN
+   ========================================================= */
+function gameShadow(){
+  scene('linear-gradient(#EDE7F6,#D1C4E9)');
+  function round(){
+    stage.innerHTML='';
+    // Pilih 3 bentuk yang sangat berbeda
+    const set=shuffle(['gajah','bebek','kelinci','brachio','stego','tri','singa']).slice(0,3);
+    const land=innerWidth>innerHeight, s=Math.max(120,Math.min(innerWidth/4,innerHeight/3.6,200));
+    let done=0; const holes={};
+    set.forEach((k,i)=>{
+      const h=el('div',`position:absolute;left:${innerWidth*(i+1)/4-s/2}px;top:${land?24:innerHeight*.14}px;filter:brightness(0);opacity:.35;transition:all .4s`,animalSVG(k,s));
+      holes[k]=h; stage.appendChild(h);
+    });
+    shuffle(set).forEach((k,i)=>{
+      const p=el('div',`left:${innerWidth*(i+1)/4-s/2}px;top:${innerHeight-s-(land?20:innerHeight*.1)}px`,animalSVG(k,s));
+      stage.appendChild(p);
+      draggable(p,(cx,cy)=>{
+        const h=holes[k];
+        if(dist([cx,cy],ctr(h))>120) return false;
+        // Pas: snap, siluet berwarna
+        p.classList.add('home-back'); p.style.left=h.offsetLeft+'px'; p.style.top=h.offsetTop+'px'; p.style.pointerEvents='none';
+        T(()=>{ p.style.display='none'; h.style.filter='none'; h.style.opacity=1; anim(h,'jump'); },450);
+        animalSound(k); SFX.chime(); stars(...ctr(h),12);
+        if(++done===3) T(()=>{ SFX.clap(); SFX.song(); Object.values(holes).forEach(x=>x.classList.add('dance')); for(let j=0;j<4;j++) T(()=>stars(Math.random()*innerWidth,innerHeight/3,14),j*350); T(round,3500); },1200);
+        return true;
+      });
+    });
+  }
+  round();
+}
+
+/* =========================================================
+   6. DINO BERWARNA
+   ========================================================= */
+function gameColor(){
+  scene('#FFFDF5');
+  // Bentuk area tiap dino (ellipse: cx,cy,rx,ry,rot)
+  const SHAPES={
+    trex:[['ekor',[150,175,70,28,-25]],['badan',[100,160,62,52,0]],['perut',[95,175,32,28,0]],['kepala',[70,80,48,40,0]],['kaki1',[75,220,18,22,0]],['kaki2',[125,220,18,22,0]],['tangan',[50,150,14,9,30]]],
+    tri:[['jumbai',[60,100,52,52,0]],['ekor',[175,160,50,18,-15]],['badan',[120,155,70,45,0]],['kepala',[60,120,36,32,0]],['kaki1',[85,205,18,20,0]],['kaki2',[150,205,18,20,0]],['tanduk',[48,86,10,10,0]]],
+    brachio:[['ekor',[180,190,50,16,-10]],['badan',[120,180,65,42,0]],['leher',[75,110,20,62,15]],['kepala',[65,45,30,22,0]],['kaki1',[90,230,16,22,0]],['kaki2',[150,230,16,22,0]],['perut',[120,195,35,20,0]]]
+  };
+  const PAL=['#FF5E7E','#FFC93C','#4FC3F7','#7ED957','#B388FF','#FF8A65'];
+  let cur=PAL[0], brush=false, kind='trex';
+  const vb=[0,0,240,260];
+  const svgW=Math.min(innerWidth*.9,innerHeight*.55);
+  const box=el('div',`position:absolute;left:50%;top:44%;transform:translate(-50%,-50%)`); stage.appendChild(box);
+  function draw(){
+    const regions=SHAPES[kind].map(([n,[cx,cy,rx,ry,r]])=>`<ellipse class="rg" data-n="${n}" cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${r} ${cx} ${cy})" fill="#fff" stroke="#444" stroke-width="4"/>`).join('');
+    const head=SHAPES[kind].find(s=>s[0]==='kepala')[1];
+    box.innerHTML=`<svg width="${svgW}" height="${svgW*1.08}" viewBox="${vb.join(' ')}"><defs></defs><g class="dg">${regions}
+      <circle cx="${head[0]-10}" cy="${head[1]-6}" r="9" fill="#fff" stroke="#444" stroke-width="3" pointer-events="none"/><circle cx="${head[0]-8}" cy="${head[1]-5}" r="5" fill="#222" pointer-events="none"/>
+      <path d="M${head[0]-25} ${head[1]+12} Q${head[0]-10} ${head[1]+22} ${head[0]+5} ${head[1]+12}" stroke="#444" stroke-width="3" fill="none" stroke-linecap="round" pointer-events="none"/></g></svg>`;
+    box.querySelector('svg').style.touchAction='none';
+  }
+  // Isi area dengan efek "meledak" dari titik sentuh (clipPath = tidak keluar garis)
+  let cid=0;
+  function fill(rg,ev){
+    if(rg.dataset.c===cur) return; rg.dataset.c=cur;
+    const svg=box.querySelector('svg'), pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
+    const p=pt.matrixTransform(svg.getScreenCTM().inverse()), ns='http://www.w3.org/2000/svg', id='c'+(cid++);
+    const cp=document.createElementNS(ns,'clipPath'); cp.id=id; cp.appendChild(rg.cloneNode()); svg.querySelector('defs').appendChild(cp);
+    const c=document.createElementNS(ns,'circle'); c.setAttribute('cx',p.x); c.setAttribute('cy',p.y); c.setAttribute('r',0); c.setAttribute('fill',cur); c.setAttribute('clip-path',`url(#${id})`); c.setAttribute('pointer-events','none');
+    rg.after(c); const t0=performance.now();
+    (function grow(t){ const k=Math.min(1,(t-t0)/350); c.setAttribute('r',k*180); if(k<1) rafs.push(requestAnimationFrame(grow)); else { rg.setAttribute('fill',c.getAttribute('fill')); c.remove(); cp.remove(); } })(t0);
+    tone(500+PAL.indexOf(cur)*90,.12,'sine',.2);
+  }
+  let painting=false;
+  box.addEventListener('pointerdown',e=>{ const rg=e.target.closest('.rg'); painting=brush; if(rg) fill(rg,e); else SFX.tap(); });
+  box.addEventListener('pointermove',e=>{ if(!painting) return; const t=document.elementFromPoint(e.clientX,e.clientY); if(t&&t.classList&&t.classList.contains('rg')) fill(t,e); });
+  addEventListener('pointerup',()=>painting=false);
+  // Tombol warna di bawah
+  const bar=el('div',`position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:0 24px`);
+  const bs=Math.max(96,Math.min(110,(innerWidth-110)/6.5));
+  const sw=PAL.map(c=>{ const b=el('button',`position:relative;width:${bs}px;height:${bs}px;min-width:0;background:${c};border:6px solid #fff`); b.className='btn';
+    b.onclick=()=>{ cur=c; sw.forEach(x=>x.style.borderColor='#fff'); b.style.borderColor='#333'; SFX.pop(); }; bar.appendChild(b); return b; });
+  sw[0].style.borderColor='#333';
+  if(innerWidth<6*bs+110) sw.forEach(b=>{b.style.width=b.style.height=Math.max(96,innerWidth/3.6)+'px';}); // tetap ≥96px
+  stage.appendChild(bar);
+  // Kolom kanan: kuas, bintang, tisu, + 3 pilihan dino
+  const side=el('div',`position:absolute;right:24px;top:24px;display:flex;flex-direction:column;gap:10px`);
+  const mk=(bg,html,fn)=>{ const b=el('button',`position:relative;width:96px;height:96px;background:${bg}`,html); b.className='btn'; b.onclick=fn; side.appendChild(b); return b; };
+  const brushB=mk('#fff',`<svg width="56" height="56" viewBox="0 0 100 100"><rect x="56" y="8" width="16" height="50" rx="8" fill="#8D6E63" transform="rotate(35 64 33)"/><path d="M30 60 Q20 90 10 92 Q40 96 50 72Z" fill="#FF5E7E"/></svg>`,()=>{ brush=!brush; brushB.style.background=brush?'#FFE082':'#fff'; SFX.pop(); });
+  mk('#FFD54F',`<svg width="60" height="60" viewBox="0 0 24 24"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="#fff" stroke="#fff" stroke-linejoin="round"/></svg>`,()=>{ anim(box,'dance',3500); SFX.song(); SFX.clap(); stars(...ctr(box),20); say('hore!',1.6); });
+  mk('#E3F2FD',`<svg width="60" height="60" viewBox="0 0 100 100"><rect x="18" y="40" width="64" height="44" rx="10" fill="#90CAF9"/><path d="M38 40 Q30 16 50 12 Q70 16 62 40Z" fill="#fff" stroke="#90CAF9" stroke-width="3"/></svg>`,()=>{ SFX.boing(); draw(); });
+  stage.appendChild(side);
+  const pick=el('div',`position:absolute;left:96px;top:14px;display:flex;gap:10px`);
+  ['trex','tri','brachio'].forEach(k=>{ const b=el('button',`position:relative;width:96px;height:96px;background:#fff;padding:0`,animalSVG(k,80)); b.className='btn'; b.onclick=()=>{ kind=k; draw(); SFX.chime(); }; pick.appendChild(b); });
+  if(innerWidth<560) pick.style.cssText+='flex-direction:column;left:14px;top:96px';
+  stage.appendChild(pick);
+  draw();
+}
+
+/* =========================================================
+   7. RUMAH BINATANG CILUKBA
+   ========================================================= */
+function gamePeek(){
+  scene('linear-gradient(#FFE0B2,#FFCC80)');
+  const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
+  g.style.cssText+=`grid-template-columns:repeat(${land?3:2},1fr)`;
+  const w=Math.max(110,Math.min(land?innerWidth/4.5:innerWidth/2.8,land?innerHeight/3:innerHeight/4.6));
+  const DC=['#E57373','#64B5F6','#81C784','#FFD54F','#BA68C8','#4DD0E1'];
+  let cnt=0, last=null; const doors=[];
+  DC.forEach(c=>{
+    const d=el('div',`position:relative;width:${w}px;height:${w*1.15}px;border-radius:${w/2}px ${w/2}px 16px 16px;background:#5D4037;overflow:hidden;perspective:600px;cursor:pointer;box-shadow:0 6px 0 rgba(0,0,0,.15)`);
+    const inn=el('div',`position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:0;transform:translateY(100%);transition:transform .25s`);
+    const leaf=el('div',`position:absolute;inset:0;background:${c};border-radius:inherit;transform-origin:left;transition:transform .3s`,`<div style="position:absolute;right:14%;top:52%;width:16%;height:12%;border-radius:50%;background:#FFF59D"></div>`);
+    d.append(inn,leaf); d.opened=false; d.wiggleEl=leaf;
+    d.onpointerdown=()=>{
+      if(d.busy){ SFX.giggle(); return; } d.busy=true; d.opened=true; cnt++;
+      const special=Math.random()<1/8;
+      let ks;
+      if(special) ks=Math.random()<.5?shuffle(ANIMALS).slice(0,2):['trex'];
+      else { let k; do k=rnd(ALL); while(k===last); last=k; ks=[k]; }
+      inn.innerHTML=ks.map(k=>`<div class="dance">${animalSVG(k,ks.length>1?w*.6:w*.95)}</div>`).join('');
+      leaf.style.transform='rotateY(-100deg)'; SFX.tap();
+      T(()=>{ inn.style.transform='translateY(8%)'; say('cilukba!',1.8,1); },150);
+      T(()=>animalSound(ks[0]),1000);
+      if(special){ SFX.song(); T(()=>{ const [x,y]=ctr(d); stars(x,y,24); stars(x,y-60,20); },300); if(ks[0]==='trex') inn.innerHTML=`<div class="dance">${animalSVG('trex',w*.9,{shell:true})}</div>`; }
+      T(()=>{ inn.style.transform='translateY(100%)'; },special?4000:2600);
+      T(()=>{ leaf.style.transform=''; d.busy=false; },special?4300:2900);
+    };
+    doors.push(d); g.appendChild(d);
+  });
+  stage.appendChild(g);
+  // Pintu yang belum dibuka bergoyang jika diam 8 detik
+  I(()=>{ if(Date.now()-lastTouch>8000){ const c=doors.filter(d=>!d.opened&&!d.busy); const t=rnd(c.length?c:doors.filter(d=>!d.busy)); if(t) anim(t,'wiggle',1000); lastTouch=Date.now()-4000; } },1000);
+}
+
+/* =========================================================
+   8. GELEMBUNG BINATANG
+   ========================================================= */
+function gameBubble(){
+  scene('linear-gradient(#B2EBF2,#E1F5FE)');
+  const list=[];
+  function spawn(){
+    if(list.length>=6) return;
+    const s=Math.max(120,Math.min(vmin()*.28,170)), k=rnd(ALL), hue=Math.random()*360;
+    const b=el('div',`position:absolute;width:${s}px;height:${s}px;border-radius:50%;cursor:pointer;
+      background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.9) 0 8%,transparent 9%),radial-gradient(circle,hsla(${hue},90%,80%,.25) 55%,hsla(${hue+60},90%,70%,.55) 75%,hsla(${hue+180},90%,75%,.7));
+      border:3px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center`,animalSVG(k,s*.6));
+    const o={b,k,s,x:Math.random()*(innerWidth-s-48)+24,y:innerHeight+10,ph:Math.random()*6,v:.5+Math.random()*.4,dead:false};
+    b.onpointerdown=()=>{
+      if(o.dead) return; o.dead=true; SFX.pop(); tone(1200,.08,'sine',.15,.05);
+      b.style.background='none'; b.style.border='none'; const inner=b.firstChild; inner.classList.add('dance');
+      inner.setAttribute('width',s*.9); inner.setAttribute('height',s*.9); animalSound(k);
+      T(()=>{ stars(...ctr(b),14); b.style.transition='transform .3s,opacity .3s'; b.style.transform+=' scale(0)'; b.style.opacity=0; },2000);
+      T(()=>{ b.remove(); list.splice(list.indexOf(o),1); },2350);
+    };
+    list.push(o); stage.appendChild(b);
+  }
+  // Gerak naik bergelombang
+  let lt=performance.now();
+  function loop(t){
+    const dt=Math.min(50,t-lt)/16; lt=t;
+    list.forEach(o=>{
+      if(o.dead) return; o.y-=o.v*dt; o.ph+=.02*dt;
+      const x=o.x+Math.sin(o.ph)*30;
+      o.b.style.transform=`translate(${x}px,${o.y}px)`;
+      if(o.y<-o.s*0.2 && !o.fading){ o.fading=true; o.b.style.transition='opacity 1s'; o.b.style.opacity=0; setTimeout(()=>{ o.b.remove(); const i=list.indexOf(o); if(i>=0) list.splice(i,1); },1000); }
+    });
+    rafs=[requestAnimationFrame(loop)]; // simpan id terakhir saja, cegah array membengkak
+  }
+  rafs.push(requestAnimationFrame(loop));
+  spawn(); I(spawn,1800);
+}
+
+showStart();
+</script>
+</body>
+</html>
