@@ -43,9 +43,36 @@ svg{display:block;overflow:visible}
 .zz{position:absolute;font:bold 48px sans-serif;color:#5c6bc0;animation:zzz 2s ease-out infinite;pointer-events:none}
 .drag{position:absolute;touch-action:none;cursor:grab;transition:none}
 .home-back{transition:left .5s ease,top .5s ease}
+/* ===== Tambahan ramah anak ===== */
+#stage{background:transparent}
+#sky{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.btn{border:5px solid #fff;box-shadow:0 8px 0 rgba(0,0,0,.12),0 14px 24px rgba(0,0,0,.08)}
+/* Mata berkedip */
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+.eyes{transform-box:fill-box;transform-origin:center;animation:blink 4.5s infinite}
+/* Melayang pelan (ikon menu, tombol) */
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.bob{animation:bob 2.6s ease-in-out infinite}
+/* Awan berjalan */
+@keyframes drift{from{transform:translateX(-40vw)}to{transform:translateX(140vw)}}
+.cloud{position:absolute;left:0;animation:drift linear infinite;opacity:.85}
+/* Lingkaran warna di setiap sentuhan */
+@keyframes ripple{from{transform:scale(.1);opacity:.9}to{transform:scale(1);opacity:0}}
+.ripple{position:fixed;width:120px;height:120px;border-radius:50%;border:8px solid;pointer-events:none;z-index:45;animation:ripple .5s ease-out forwards}
+/* Konfeti jatuh saat perayaan */
+@keyframes fall{to{transform:translateY(115vh) rotate(720deg)}}
+.confetti{position:fixed;top:-30px;pointer-events:none;z-index:44;animation:fall 2.5s linear forwards}
+/* Tangan penunjuk (petunjuk saat anak diam) */
+@keyframes press{0%,100%{transform:scale(1)}50%{transform:scale(.8)}}
+.hand{position:fixed;pointer-events:none;z-index:46;transition:left 1.1s ease-in-out,top 1.1s ease-in-out;filter:drop-shadow(0 4px 4px rgba(0,0,0,.2))}
+.hand.tap{animation:press .5s ease 3}
+/* Kilau pada jawaban benar setelah beberapa kali mencoba */
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 0 #FFD54F)}50%{filter:drop-shadow(0 0 22px #FFC107)}}
+.glow{animation:glow 1s ease infinite}
 </style>
 </head>
 <body>
+<div id="sky"></div>
 <div id="stage"></div>
 <!-- Tombol rumah: tahan 2 detik -->
 <div id="home">
@@ -77,7 +104,9 @@ const SFX={
   boing(){ tone(220,.3,'triangle',.3,0,660); },
   chime(){ [784,988,1175,1568].forEach((f,i)=>tone(f,.25,'sine',.2,i*.08)); },
   chew(){ for(let i=0;i<4;i++) tone(180+i*20,.08,'triangle',.25,i*.18); },
-  crack(){ tone(900,.06,'square',.12,0,300); },
+  crack(){ tone(900,.08,'triangle',.18,0,400); },
+  // Nada pentatonik naik bergantian: ketukan beruntun terdengar seperti lagu
+  _n:0, note(){ tone([523,587,659,784,880,1046,880,784][this._n++%8],.18,'sine',.18); },
   giggle(){ [880,1046,880,1046,1318].forEach((f,i)=>tone(f,.09,'sine',.2,i*.09)); },
   clap(){ if(!AC) return; for(let k=0;k<6;k++){ const t=AC.currentTime+k*.13, b=AC.createBuffer(1,AC.sampleRate*.08,AC.sampleRate), d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length); const s=AC.createBufferSource(), g=AC.createGain(); g.gain.value=.3; s.buffer=b; s.connect(g).connect(AC.destination); s.start(t);} },
   // Lagu ceria pendek
@@ -132,13 +161,14 @@ function say(text, pitch=1.4, rate=.9){
 /* =========================================================
    DATA & GAMBAR KARAKTER (SVG, bulat, mata besar)
    ========================================================= */
+// n = nama yang diucapkan (belajar kosakata), snd = tiruan suara
 const AN={
-  singa:{c:'#FFC04D',snd:'aum aum'}, gajah:{c:'#A9BCE0',snd:'tuuuut'},
-  bebek:{c:'#FFE44D',snd:'kwek kwek'}, kucing:{c:'#FFB0D0',snd:'meong'},
-  sapi:{c:'#FFFFFF',snd:'mooo'}, monyet:{c:'#C8935F',snd:'uuk aak aak'},
-  kelinci:{c:'#F1E4FA',snd:'ciit ciit'}, anjing:{c:'#E7B57E',snd:'guk guk'},
-  trex:{c:'#7ED957',snd:'raawr'}, tri:{c:'#FF9A70',snd:'grooo'},
-  brachio:{c:'#6EC1FF',snd:'huuum'}, stego:{c:'#C58BE0',snd:'grrr grrr'}
+  singa:{c:'#FFC04D',n:'singa',snd:'aum aum'}, gajah:{c:'#A9BCE0',n:'gajah',snd:'tuuuut'},
+  bebek:{c:'#FFE44D',n:'bebek',snd:'kwek kwek'}, kucing:{c:'#FFB0D0',n:'kucing',snd:'meong'},
+  sapi:{c:'#FFFFFF',n:'sapi',snd:'mooo'}, monyet:{c:'#C8935F',n:'monyet',snd:'uuk aak aak'},
+  kelinci:{c:'#F1E4FA',n:'kelinci',snd:'ciit ciit'}, anjing:{c:'#E7B57E',n:'anjing',snd:'guk guk'},
+  trex:{c:'#7ED957',n:'dino',snd:'raawr'}, tri:{c:'#FF9A70',n:'dino',snd:'grooo'},
+  brachio:{c:'#6EC1FF',n:'dino',snd:'huuum'}, stego:{c:'#C58BE0',n:'dino',snd:'grrr grrr'}
 };
 const ANIMALS=['singa','gajah','bebek','kucing','sapi','monyet','kelinci','anjing'];
 const DINOS=['trex','tri','brachio','stego'];
@@ -180,7 +210,7 @@ function animalSVG(k,size=160,o={}){
   // Mata (besar) atau tidur
   const eyes=o.sleep
     ?`<path d="M34 ${hy} Q40 ${hy+5} 46 ${hy} M54 ${hy} Q60 ${hy+5} 66 ${hy}" stroke="#333" stroke-width="3" fill="none" stroke-linecap="round"/>`
-    :`<circle cx="39" cy="${hy-2}" r="8" fill="#fff"/><circle cx="61" cy="${hy-2}" r="8" fill="#fff"/><circle cx="40" cy="${hy-1}" r="5" fill="#222"/><circle cx="62" cy="${hy-1}" r="5" fill="#222"/><circle cx="42" cy="${hy-3}" r="2" fill="#fff"/><circle cx="64" cy="${hy-3}" r="2" fill="#fff"/>`;
+    :`<g class="eyes" style="animation-delay:-${(Math.random()*4.5).toFixed(2)}s"><circle cx="39" cy="${hy-2}" r="9" fill="#fff"/><circle cx="61" cy="${hy-2}" r="9" fill="#fff"/><circle cx="40" cy="${hy-1}" r="6" fill="#222"/><circle cx="62" cy="${hy-1}" r="6" fill="#222"/><circle cx="42.5" cy="${hy-3.5}" r="2.4" fill="#fff"/><circle cx="64.5" cy="${hy-3.5}" r="2.4" fill="#fff"/></g>`;
   const shell=o.shell?`<path d="M30 ${hy-18} Q50 ${hy-40} 70 ${hy-18} L64 ${hy-22} L58 ${hy-16} L50 ${hy-22} L42 ${hy-16} L36 ${hy-22}Z" fill="#FFF8E1" stroke="#E0C080" stroke-width="2" stroke-linejoin="round"/>`:'';
   const belly=`<ellipse class="belly" cx="50" cy="76" rx="${isDino?18:16}" ry="14" fill="rgba(255,255,255,.45)"/>`;
   return `<svg width="${size}" height="${size}" viewBox="-5 -15 110 115"><g class="body">${back}
@@ -191,7 +221,8 @@ function animalSVG(k,size=160,o={}){
     ${eyes}${mouth}${shell}</g></svg>`;
 }
 // Suara binatang: nada lucu + ucapan
-function animalSound(k){ SFX.boing(); setTimeout(()=>say(AN[k].snd,1.5),120); }
+// withName=true: ucapkan nama dulu ("sapi! mooo") untuk belajar kata
+function animalSound(k,withName){ SFX.boing(); setTimeout(()=>say((withName?AN[k].n+'! ':'')+AN[k].snd,1.5),120); }
 
 /* =========================================================
    UTILITAS BERSAMA: timer terkelola, efek bintang, drag
@@ -237,6 +268,26 @@ function draggable(e,onDrop){
 // Pengecil ukuran sesuai layar
 const vmin=()=>Math.min(innerWidth,innerHeight);
 
+// Hujan konfeti untuk perayaan besar
+function confetti(n=40){
+  for(let i=0;i<n;i++){
+    const s=14+Math.random()*14, c=el('div',`left:${Math.random()*100}vw;width:${s}px;height:${s}px;background:${rnd(COLORS)};border-radius:${Math.random()<.5?'50%':'6px'};animation-duration:${1.8+Math.random()*1.6}s;animation-delay:${Math.random()*.6}s`);
+    c.className='confetti'; document.body.appendChild(c); setTimeout(()=>c.remove(),4200);
+  }
+}
+// Tangan penunjuk: ketuk elemen a, atau seret dari a ke b
+const HAND=`<svg width="80" height="90" viewBox="0 0 80 90"><rect x="28" y="4" width="18" height="46" rx="9" fill="#FFD9B8" stroke="#E0A878" stroke-width="3"/><rect x="14" y="36" width="54" height="46" rx="22" fill="#FFD9B8" stroke="#E0A878" stroke-width="3"/></svg>`;
+function hand(a,b){
+  if(!a||!a.isConnected) return;
+  const h=el('div','',HAND); h.className='hand';
+  const put=e=>{ const [x,y]=ctr(e); h.style.left=x-36+'px'; h.style.top=y-6+'px'; };
+  put(a); document.body.appendChild(h);
+  if(b) T(()=>put(b),350); else h.classList.add('tap');
+  setTimeout(()=>h.remove(),1800);
+}
+// Panggil fn jika anak diam selama ms (petunjuk lembut)
+function idleHint(fn,ms=6000){ I(()=>{ if(Date.now()-lastTouch>ms){ lastTouch=Date.now(); fn(); } },500); }
+
 /* =========================================================
    NAVIGASI: layar mulai, menu, tombol rumah
    ========================================================= */
@@ -244,12 +295,27 @@ const home=document.getElementById('home');
 let holdT=null;
 home.addEventListener('pointerdown',e=>{ e.stopPropagation(); home.classList.add('hold'); holdT=setTimeout(()=>{ home.classList.remove('hold'); SFX.chime(); showMenu(); },2000); });
 ['pointerup','pointerleave','pointercancel'].forEach(t=>home.addEventListener(t,()=>{ clearTimeout(holdT); home.classList.remove('hold'); }));
-document.addEventListener('pointerdown',()=>{ lastTouch=Date.now(); },true);
+// Setiap sentuhan: lingkaran warna; area kosong juga berbunyi nada lembut
+document.addEventListener('pointerdown',e=>{
+  lastTouch=Date.now();
+  const r=el('div',`left:${e.clientX-60}px;top:${e.clientY-60}px;border-color:${rnd(COLORS)}`); r.className='ripple';
+  document.body.appendChild(r); setTimeout(()=>r.remove(),550);
+  if(AC && (e.target===stage||e.target===document.body)) SFX.note();
+},true);
 document.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('touchmove',e=>{ if(e.touches.length>1) e.preventDefault(); },{passive:false});
 
-function scene(bg){ clearAll(); stage.innerHTML=''; stage.style.background=bg||''; }
+// Latar dipasang di body agar awan (#sky) tetap terlihat di semua mini-game
+function scene(bg){ clearAll(); stage.innerHTML=''; document.body.style.background=bg||''; }
+// Awan tersenyum yang berjalan pelan (dibuat sekali)
+(function makeSky(){
+  const cloud=`<svg width="160" height="90" viewBox="0 0 160 90"><circle cx="50" cy="55" r="30" fill="#fff"/><circle cx="85" cy="40" r="36" fill="#fff"/><circle cx="118" cy="58" r="26" fill="#fff"/><rect x="40" y="55" width="90" height="30" rx="15" fill="#fff"/><circle cx="72" cy="50" r="4" fill="#90A4AE"/><circle cx="98" cy="50" r="4" fill="#90A4AE"/><path d="M78 62 Q85 68 92 62" stroke="#90A4AE" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="64" cy="60" r="5" fill="#FFCDD2"/><circle cx="106" cy="60" r="5" fill="#FFCDD2"/></svg>`;
+  [[8,70,-10],[22,95,-55],[4,120,-85]].forEach(([top,dur,delay])=>{
+    const c=el('div',`top:${top}%;animation-duration:${dur}s;animation-delay:${delay}s`,cloud); c.className='cloud';
+    document.getElementById('sky').appendChild(c);
+  });
+})();
 
 // Layar awal: satu tombol "mulai" bergambar (segitiga play + dino)
 function showStart(){
@@ -260,8 +326,17 @@ function showStart(){
   b.className='btn center breathe';
   const d=el('div',`position:absolute;left:50%;bottom:4%;transform:translateX(-50%)`,animalSVG('trex',Math.min(vmin()*.28,160)));
   d.className='';
-  b.onclick=()=>{ audioInit(); BGM.start(); SFX.chime(); say('halo!'); showMenu(); };
+  b.onclick=()=>{
+    audioInit(); BGM.start(); SFX.chime(); say('halo! ayo main!');
+    // Layar penuh + layar tetap menyala, agar anak tidak menyentuh UI browser
+    try{ document.documentElement.requestFullscreen?.().catch(()=>{}); }catch(e){}
+    try{ navigator.wakeLock?.request('screen').catch(()=>{}); }catch(e){}
+    showMenu();
+  };
   stage.append(d,b); anim(d.firstChild,'dance');
+  // Teman-teman binatang mengintip di sudut bawah
+  const m=Math.min(vmin()*.2,120);
+  ['kucing','bebek'].forEach((k,i)=>{ const a=el('div',`position:absolute;bottom:3%;${i?'right':'left'}:4%`,animalSVG(k,m)); a.className='bob'; a.style.animationDelay=i*.8+'s'; stage.appendChild(a); });
 }
 
 // Menu utama: 8 ikon besar
@@ -283,9 +358,10 @@ function showMenu(){
   const sz=Math.max(110,Math.min(land?innerWidth/5:innerWidth/2.6, land?innerHeight/2.6:innerHeight/5.2));
   GAMES.forEach((G,i)=>{
     const b=el('button',`position:relative;width:${sz}px;height:${sz}px;border:none;background:none;padding:0;cursor:pointer`,G.ic());
-    b.onpointerdown=()=>{ SFX.pop(); anim(b,'jiggle',600); };
+    b.onpointerdown=()=>{ SFX.pop(); anim(b.firstChild,'jiggle',600); };
     b.onclick=()=>{ T(()=>{ scene(); home.style.display='flex'; G.run(); },250); };
-    g.appendChild(b); b.classList.add('popin');
+    // Ikon melayang pelan bergantian agar mengundang disentuh
+    b.className='bob'; b.style.animationDelay=(i*.3)+'s'; g.appendChild(b);
   });
   stage.appendChild(g);
 }
@@ -330,14 +406,14 @@ function gameZoo(){
       if(b.busy){ anim(a.firstChild,'jiggle'); SFX.giggle(); return; }
       b.busy=true; let k; do k=rnd(zooA); while(k===last); last=k;
       a.innerHTML=animalSVG(k,s*.9); a.style.transform='scale(1)'; a.style.zIndex=2; bush.style.zIndex=1;
-      anim(a.firstChild,'jump'); animalSound(k); const [x,y]=ctr(b); stars(x,y-s/3);
+      anim(a.firstChild,'jump'); animalSound(k,true); const [x,y]=ctr(b); stars(x,y-s/3);
       T(()=>{ a.style.transform='scale(0)'; b.busy=false; },3000);
     };
     boxes.push(b); g.appendChild(b);
   }
   stage.appendChild(g);
   // Ajakan: semak bergoyang jika diam 10 detik
-  I(()=>{ if(Date.now()-lastTouch>10000){ anim(rnd(boxes.filter(b=>!b.busy)).lastChild,'wiggle',1000); tone(880,.1,'sine',.1); lastTouch=Date.now()-5000; } },1000);
+  idleHint(()=>{ const free=boxes.filter(b=>!b.busy); if(!free.length) return; const b=rnd(free); anim(b.lastChild,'wiggle',1000); hand(b); tone(880,.1,'sine',.1); },10000);
 }
 
 /* =========================================================
@@ -349,13 +425,15 @@ function gameEgg(){
   let taps=0;
   const wrap=el('div',`position:absolute;left:50%;top:42%;transform:translate(-50%,-50%)`);
   const eg=el('div','',eggSVG(s,0)); wrap.appendChild(eg); stage.appendChild(wrap);
+  // Petunjuk: tangan mengetuk telur / menyuapi dino jika anak diam
+  let hintFn=()=>hand(eg); idleHint(()=>hintFn(),5000);
   eg.onpointerdown=()=>{
     taps++; SFX.crack(); tone(400+taps*80,.1,'triangle',.2);
     eg.innerHTML=eggSVG(s,taps); anim(eg,'wiggle');
     if(taps>=5) T(hatch,300);
   };
   function hatch(){
-    const k=rnd(DINOS), [x,y]=ctr(wrap); stars(x,y,20); SFX.chime(); SFX.clap();
+    const k=rnd(DINOS), [x,y]=ctr(wrap); stars(x,y,20); SFX.chime(); SFX.clap(); confetti(30);
     wrap.innerHTML=''; const dino=el('div','position:relative',animalSVG(k,s,{shell:true})); wrap.appendChild(dino); anim(dino,'jump');
     T(()=>animalSound(k),400);
     let sleeping=false, zz=[];
@@ -366,10 +444,11 @@ function gameEgg(){
       if(yy>.55){ SFX.giggle(); say('hihihi',1.8,1.2); anim(dino,'jiggle'); } else { SFX.tap(); anim(dino,'wiggle'); }
     };
     // Makanan: apel & daun diseret ke mulut
-    const fs=Math.max(110,s*.32);
+    const fs=Math.max(110,s*.32), foodEls=[];
+    hintFn=()=>{ if(!sleeping) hand(rnd(foodEls),dino); };
     ['apel','daun'].forEach((f,i)=>{
       const fe=el('div',`left:${i?innerWidth-fs-30:30}px;top:${innerHeight-fs-30}px;width:${fs}px;height:${fs}px`,foodSVG(f,fs));
-      stage.appendChild(fe);
+      stage.appendChild(fe); foodEls.push(fe);
       draggable(fe,(cx,cy)=>{
         const r=dino.getBoundingClientRect(), mouth=[r.left+r.width/2,r.top+r.height*.5];
         if(dist([cx,cy],mouth)<150){
@@ -418,25 +497,32 @@ function gameSound(){
     replay.className='btn'; stage.appendChild(replay);
     const row=el('div',`position:absolute;left:0;right:0;top:150px;bottom:24px;display:flex;flex-direction:${innerWidth>innerHeight?'row':'column'};justify-content:space-evenly;align-items:center`);
     stage.appendChild(row);
-    let ans;
+    let ans, miss=0;
     replay.onclick=()=>animalSound(ans);
+    replay.classList.add('bob');
+    // Jika diam, suara diulang dan tombol speaker diketuk tangan
+    idleHint(()=>{ animalSound(ans); hand(replay); },7000);
     function ask(){
-      row.innerHTML=''; const opts=shuffle(ALL).slice(0,n); ans=rnd(opts);
+      row.innerHTML=''; miss=0; const opts=shuffle(ALL).slice(0,n); ans=rnd(opts);
       const s=Math.max(120,Math.min((innerWidth>innerHeight?innerWidth/(n+1):innerHeight/(n+1.6)),240));
       opts.forEach(k=>{
         const c=el('div',`cursor:pointer`,animalSVG(k,s)); c.classList.add('popin'); row.appendChild(c);
         c.onpointerdown=()=>{
           if(row.locked) return;
           if(k===ans){
-            row.locked=true; c.classList.remove('popin'); c.classList.add('dance'); SFX.clap(); SFX.chime(); const [x,y]=ctr(c); stars(x,y,16); animalSound(k);
+            row.locked=true; c.classList.remove('popin','glow'); c.classList.add('dance'); SFX.clap(); SFX.chime(); const [x,y]=ctr(c); stars(x,y,16); animalSound(k,true);
             T(()=>{ row.locked=false; q++; if(q>=5) party(); else ask(); },2200);
-          } else { anim(c,'shake',900); T(()=>animalSound(ans),500); }
+          } else {
+            anim(c,'shake',900); T(()=>animalSound(ans),500);
+            // Setelah 2 kali meleset, jawaban benar berkilau sebagai bantuan
+            if(++miss>=2) row.children[opts.indexOf(ans)].classList.add('glow');
+          }
         };
       });
       T(()=>animalSound(ans),500);
     }
     function party(){
-      row.innerHTML=''; SFX.song(); SFX.clap();
+      row.innerHTML=''; SFX.song(); SFX.clap(); confetti(50); say('hore! pintar!',1.6);
       shuffle(ALL).slice(0,3).forEach(k=>{ const c=el('div','',animalSVG(k,160)); c.className='dance'; row.appendChild(c); });
       for(let i=0;i<5;i++) T(()=>stars(Math.random()*innerWidth,Math.random()*innerHeight,14),i*400);
       T(()=>{ q=0; ask(); },4500);
@@ -459,9 +545,10 @@ function gameFeed(){
     const a=el('div','',animalSVG(k,s,{mouth:'open'})); wrap.appendChild(a); stage.appendChild(wrap); anim(a,'popin');
     T(()=>animalSound(k),300);
     const fs=Math.max(110,Math.min(innerWidth/4,150)), foods=shuffle([food,...shuffle(PAIRS.map(p=>p[1]).filter(f=>f!==food)).slice(0,2)]);
+    let good=null;
     foods.forEach((f,i)=>{
       const fe=el('div',`left:${innerWidth*(i+1)/4-fs/2}px;top:${innerHeight-fs-30}px;width:${fs}px;height:${fs}px`,foodSVG(f,fs));
-      stage.appendChild(fe);
+      stage.appendChild(fe); if(f===food) good=fe;
       draggable(fe,(cx,cy)=>{
         const r=a.getBoundingClientRect(), mouth=[r.left+r.width/2,r.top+r.height*.55];
         if(f!==food || dist([cx,cy],mouth)>150) return false;
@@ -472,11 +559,14 @@ function gameFeed(){
         wrap.style.transform=`translate(-50%,-50%) scale(${1+eaten*.06})`;
         T(()=>{ a.innerHTML=animalSVG(k,s,{mouth:eaten>=3?'smile':'open'}); animalSound(k); stars(mouth[0],mouth[1],8); },900);
         T(()=>{ if(eaten<3){ fe.classList.remove('home-back'); fe.style.transition='none'; fe.style.left=fe.dataset.hx+'px'; fe.style.top=fe.dataset.hy+'px'; requestAnimationFrame(()=>{fe.style.transition='transform .3s';fe.style.transform='';}); } },1400);
-        if(eaten>=3) T(()=>{ a.classList.add('dance'); SFX.song(); const [x,y]=ctr(a); stars(x,y,20); T(()=>{ idx=(idx+1)%4; round(); },3500); },1500);
+        if(eaten>=3) T(()=>{ a.classList.add('dance'); SFX.song(); confetti(40); say('kenyang!',1.6); const [x,y]=ctr(a); stars(x,y,20); T(()=>{ idx=(idx+1)%4; round(); },3500); },1500);
         return true;
       });
     });
+    // Petunjuk: tangan menyeret makanan yang benar ke mulut, binatang mengecap
+    hint=()=>{ if(eaten<3){ hand(good,a); anim(a,'wiggle',1000); } };
   }
+  let hint=()=>{}; idleHint(()=>hint(),5000);
   round();
 }
 
@@ -490,26 +580,30 @@ function gameShadow(){
     // Pilih 3 bentuk yang sangat berbeda
     const set=shuffle(['gajah','bebek','kelinci','brachio','stego','tri','singa']).slice(0,3);
     const land=innerWidth>innerHeight, s=Math.max(120,Math.min(innerWidth/4,innerHeight/3.6,200));
-    let done=0; const holes={};
+    let done=0; const holes={}, pieces=[];
+    // Petunjuk: tangan menyeret satu keping yang belum terpasang ke siluetnya
+    hint=()=>{ const p=pieces.find(p=>!p.placed); if(p){ hand(p,holes[p.k]); anim(holes[p.k],'wiggle',1000); } };
     set.forEach((k,i)=>{
       const h=el('div',`position:absolute;left:${innerWidth*(i+1)/4-s/2}px;top:${land?24:innerHeight*.14}px;filter:brightness(0);opacity:.35;transition:all .4s`,animalSVG(k,s));
       holes[k]=h; stage.appendChild(h);
     });
     shuffle(set).forEach((k,i)=>{
       const p=el('div',`left:${innerWidth*(i+1)/4-s/2}px;top:${innerHeight-s-(land?20:innerHeight*.1)}px`,animalSVG(k,s));
-      stage.appendChild(p);
+      stage.appendChild(p); p.k=k; pieces.push(p);
       draggable(p,(cx,cy)=>{
         const h=holes[k];
         if(dist([cx,cy],ctr(h))>120) return false;
+        p.placed=true;
         // Pas: snap, siluet berwarna
         p.classList.add('home-back'); p.style.left=h.offsetLeft+'px'; p.style.top=h.offsetTop+'px'; p.style.pointerEvents='none';
         T(()=>{ p.style.display='none'; h.style.filter='none'; h.style.opacity=1; anim(h,'jump'); },450);
-        animalSound(k); SFX.chime(); stars(...ctr(h),12);
-        if(++done===3) T(()=>{ SFX.clap(); SFX.song(); Object.values(holes).forEach(x=>x.classList.add('dance')); for(let j=0;j<4;j++) T(()=>stars(Math.random()*innerWidth,innerHeight/3,14),j*350); T(round,3500); },1200);
+        animalSound(k,true); SFX.chime(); stars(...ctr(h),12);
+        if(++done===3) T(()=>{ SFX.clap(); SFX.song(); confetti(45); Object.values(holes).forEach(x=>x.classList.add('dance')); for(let j=0;j<4;j++) T(()=>stars(Math.random()*innerWidth,innerHeight/3,14),j*350); T(round,3500); },1200);
         return true;
       });
     });
   }
+  let hint=()=>{}; idleHint(()=>hint(),6000);
   round();
 }
 
@@ -525,6 +619,9 @@ function gameColor(){
     brachio:[['ekor',[180,190,50,16,-10]],['badan',[120,180,65,42,0]],['leher',[75,110,20,62,15]],['kepala',[65,45,30,22,0]],['kaki1',[90,230,16,22,0]],['kaki2',[150,230,16,22,0]],['perut',[120,195,35,20,0]]]
   };
   const PAL=['#FF5E7E','#FFC93C','#4FC3F7','#7ED957','#B388FF','#FF8A65'];
+  const PALN=['merah','kuning','biru','hijau','ungu','oranye']; // diucapkan saat dipilih
+  // Petunjuk: tangan mengetuk area yang masih putih
+  idleHint(()=>{ const w=[...box.querySelectorAll('.rg')].find(r=>!r.dataset.c); if(w) hand(w); },7000);
   let cur=PAL[0], brush=false, kind='trex';
   const vb=[0,0,240,260];
   const svgW=Math.min(innerWidth*.9,innerHeight*.55);
@@ -557,15 +654,15 @@ function gameColor(){
   const bar=el('div',`position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:0 24px`);
   const bs=Math.max(96,Math.min(110,(innerWidth-110)/6.5));
   const sw=PAL.map(c=>{ const b=el('button',`position:relative;width:${bs}px;height:${bs}px;min-width:0;background:${c};border:6px solid #fff`); b.className='btn';
-    b.onclick=()=>{ cur=c; sw.forEach(x=>x.style.borderColor='#fff'); b.style.borderColor='#333'; SFX.pop(); }; bar.appendChild(b); return b; });
-  sw[0].style.borderColor='#333';
+    b.onclick=()=>{ cur=c; sw.forEach(x=>{x.style.borderColor='#fff';x.style.transform='';}); b.style.borderColor='#333'; b.style.transform='scale(1.12)'; SFX.pop(); say(PALN[PAL.indexOf(c)],1.5); }; bar.appendChild(b); return b; });
+  sw[0].style.borderColor='#333'; sw[0].style.transform='scale(1.12)';
   if(innerWidth<6*bs+110) sw.forEach(b=>{b.style.width=b.style.height=Math.max(96,innerWidth/3.6)+'px';}); // tetap ≥96px
   stage.appendChild(bar);
   // Kolom kanan: kuas, bintang, tisu, + 3 pilihan dino
   const side=el('div',`position:absolute;right:24px;top:24px;display:flex;flex-direction:column;gap:10px`);
   const mk=(bg,html,fn)=>{ const b=el('button',`position:relative;width:96px;height:96px;background:${bg}`,html); b.className='btn'; b.onclick=fn; side.appendChild(b); return b; };
   const brushB=mk('#fff',`<svg width="56" height="56" viewBox="0 0 100 100"><rect x="56" y="8" width="16" height="50" rx="8" fill="#8D6E63" transform="rotate(35 64 33)"/><path d="M30 60 Q20 90 10 92 Q40 96 50 72Z" fill="#FF5E7E"/></svg>`,()=>{ brush=!brush; brushB.style.background=brush?'#FFE082':'#fff'; SFX.pop(); });
-  mk('#FFD54F',`<svg width="60" height="60" viewBox="0 0 24 24"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="#fff" stroke="#fff" stroke-linejoin="round"/></svg>`,()=>{ anim(box,'dance',3500); SFX.song(); SFX.clap(); stars(...ctr(box),20); say('hore!',1.6); });
+  mk('#FFD54F',`<svg width="60" height="60" viewBox="0 0 24 24"><path d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="#fff" stroke="#fff" stroke-linejoin="round"/></svg>`,()=>{ anim(box,'dance',3500); SFX.song(); SFX.clap(); confetti(45); stars(...ctr(box),20); say('hore! cantik sekali!',1.6); });
   mk('#E3F2FD',`<svg width="60" height="60" viewBox="0 0 100 100"><rect x="18" y="40" width="64" height="44" rx="10" fill="#90CAF9"/><path d="M38 40 Q30 16 50 12 Q70 16 62 40Z" fill="#fff" stroke="#90CAF9" stroke-width="3"/></svg>`,()=>{ SFX.boing(); draw(); });
   stage.appendChild(side);
   const pick=el('div',`position:absolute;left:96px;top:14px;display:flex;gap:10px`);
@@ -599,8 +696,8 @@ function gamePeek(){
       inn.innerHTML=ks.map(k=>`<div class="dance">${animalSVG(k,ks.length>1?w*.6:w*.95)}</div>`).join('');
       leaf.style.transform='rotateY(-100deg)'; SFX.tap();
       T(()=>{ inn.style.transform='translateY(8%)'; say('cilukba!',1.8,1); },150);
-      T(()=>animalSound(ks[0]),1000);
-      if(special){ SFX.song(); T(()=>{ const [x,y]=ctr(d); stars(x,y,24); stars(x,y-60,20); },300); if(ks[0]==='trex') inn.innerHTML=`<div class="dance">${animalSVG('trex',w*.9,{shell:true})}</div>`; }
+      T(()=>animalSound(ks[0],true),1000);
+      if(special){ SFX.song(); confetti(40); T(()=>{ const [x,y]=ctr(d); stars(x,y,24); stars(x,y-60,20); },300); if(ks[0]==='trex') inn.innerHTML=`<div class="dance">${animalSVG('trex',w*.9,{shell:true})}</div>`; }
       T(()=>{ inn.style.transform='translateY(100%)'; },special?4000:2600);
       T(()=>{ leaf.style.transform=''; d.busy=false; },special?4300:2900);
     };
@@ -608,7 +705,7 @@ function gamePeek(){
   });
   stage.appendChild(g);
   // Pintu yang belum dibuka bergoyang jika diam 8 detik
-  I(()=>{ if(Date.now()-lastTouch>8000){ const c=doors.filter(d=>!d.opened&&!d.busy); const t=rnd(c.length?c:doors.filter(d=>!d.busy)); if(t) anim(t,'wiggle',1000); lastTouch=Date.now()-4000; } },1000);
+  I(()=>{ if(Date.now()-lastTouch>8000){ const c=doors.filter(d=>!d.opened&&!d.busy); const t=rnd(c.length?c:doors.filter(d=>!d.busy)); if(t){ anim(t,'wiggle',1000); hand(t); } lastTouch=Date.now()-4000; } },1000);
 }
 
 /* =========================================================
@@ -627,7 +724,7 @@ function gameBubble(){
     b.onpointerdown=()=>{
       if(o.dead) return; o.dead=true; SFX.pop(); tone(1200,.08,'sine',.15,.05);
       b.style.background='none'; b.style.border='none'; const inner=b.firstChild; inner.classList.add('dance');
-      inner.setAttribute('width',s*.9); inner.setAttribute('height',s*.9); animalSound(k);
+      inner.setAttribute('width',s*.9); inner.setAttribute('height',s*.9); animalSound(k,true);
       T(()=>{ stars(...ctr(b),14); b.style.transition='transform .3s,opacity .3s'; b.style.transform+=' scale(0)'; b.style.opacity=0; },2000);
       T(()=>{ b.remove(); list.splice(list.indexOf(o),1); },2350);
     };
@@ -646,6 +743,8 @@ function gameBubble(){
     rafs=[requestAnimationFrame(loop)]; // simpan id terakhir saja, cegah array membengkak
   }
   rafs.push(requestAnimationFrame(loop));
+  // Petunjuk: tangan mengetuk gelembung terdekat jika anak diam
+  idleHint(()=>{ const o=list.find(o=>!o.dead&&o.y<innerHeight*.7&&o.y>0); if(o) hand(o.b); },6000);
   spawn(); I(spawn,1800);
 }
 
