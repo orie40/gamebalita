@@ -69,6 +69,8 @@ svg{display:block;overflow:visible}
 /* Kilau pada jawaban benar setelah beberapa kali mencoba */
 @keyframes glow{0%,100%{filter:drop-shadow(0 0 0 #FFD54F)}50%{filter:drop-shadow(0 0 22px #FFC107)}}
 .glow{animation:glow 1s ease infinite}
+/* Huruf & angka besar membulat */
+.big{font-family:'Arial Rounded MT Bold','Nunito','Comic Sans MS','Chalkboard SE',sans-serif;font-weight:900;line-height:1}
 </style>
 </head>
 <body>
@@ -348,14 +350,16 @@ const GAMES=[
   {ic:()=>iconBox('#B39DDB',`<div style="filter:brightness(0);opacity:.45">${animalSVG('gajah',70)}</div>`),run:gameShadow},
   {ic:()=>iconBox('#F48FB1',`<svg width="70" height="70" viewBox="0 0 100 100"><circle cx="35" cy="38" r="18" fill="#FF5E7E"/><circle cx="62" cy="32" r="16" fill="#FFC93C"/><circle cx="50" cy="62" r="20" fill="#4FC3F7"/></svg>`),run:gameColor},
   {ic:()=>iconBox('#FFCC80',doorSVG(70,'#8D6E63')),run:gamePeek},
-  {ic:()=>iconBox('#80DEEA',`<svg width="70" height="70" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="rgba(255,255,255,.5)" stroke="#fff" stroke-width="5"/><circle cx="36" cy="34" r="8" fill="#fff"/></svg>`),run:gameBubble}
+  {ic:()=>iconBox('#80DEEA',`<svg width="70" height="70" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="rgba(255,255,255,.5)" stroke="#fff" stroke-width="5"/><circle cx="36" cy="34" r="8" fill="#fff"/></svg>`),run:gameBubble},
+  {ic:()=>iconBox('#FFB74D',`<svg width="80" height="70" viewBox="0 0 100 80"><text x="50" y="58" text-anchor="middle" font-size="50" font-weight="900" fill="#fff" font-family="Arial Rounded MT Bold,Arial">123</text></svg>`),run:gameCount},
+  {ic:()=>iconBox('#9575CD',`<svg width="80" height="70" viewBox="0 0 100 80"><text x="50" y="58" text-anchor="middle" font-size="46" font-weight="900" fill="#fff" font-family="Arial Rounded MT Bold,Arial">ABC</text></svg>`),run:gameRead}
 ];
 function iconBox(bg,inner){return `<div style="width:100%;height:100%;border-radius:28px;background:${bg};display:flex;align-items:center;justify-content:center;box-shadow:0 8px 0 rgba(0,0,0,.12)">${inner}</div>`;}
 function showMenu(){
   scene('linear-gradient(#bfe9ff,#e8fbd8)'); home.style.display='none';
   const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
-  g.style.cssText+=`inset:24px;grid-template-columns:repeat(${land?4:2},1fr);grid-template-rows:repeat(${land?2:4},1fr)`;
-  const sz=Math.max(110,Math.min(land?innerWidth/5:innerWidth/2.6, land?innerHeight/2.6:innerHeight/5.2));
+  g.style.cssText+=`inset:24px;grid-template-columns:repeat(${land?5:2},1fr);grid-template-rows:repeat(${land?2:5},1fr)`;
+  const sz=Math.max(96,Math.min(land?innerWidth/6.2:innerWidth/2.6, land?innerHeight/2.7:innerHeight/6.6));
   GAMES.forEach((G,i)=>{
     const b=el('button',`position:relative;width:${sz}px;height:${sz}px;border:none;background:none;padding:0;cursor:pointer`,G.ic());
     b.onpointerdown=()=>{ SFX.pop(); anim(b.firstChild,'jiggle',600); };
@@ -746,6 +750,181 @@ function gameBubble(){
   // Petunjuk: tangan mengetuk gelembung terdekat jika anak diam
   idleHint(()=>{ const o=list.find(o=>!o.dead&&o.y<innerHeight*.7&&o.y>0); if(o) hand(o.b); },6000);
   spawn(); I(spawn,1800);
+}
+
+/* =========================================================
+   BERSAMA UNTUK BERHITUNG & MEMBACA
+   ========================================================= */
+const NUM=['nol','satu','dua','tiga','empat','lima','enam','tujuh','delapan','sembilan','sepuluh'];
+const SCALE=[523,587,659,784,880,988,1046,1175,1318,1568];
+const SPK=`<svg width="64" height="64" viewBox="0 0 100 100"><path d="M20 40h15l20-18v56L35 60H20z" fill="#fff"/><path d="M66 34q12 16 0 32M76 26q20 24 0 48" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/></svg>`;
+const ARROW=`<svg width="64" height="64" viewBox="0 0 100 100"><path d="M28 50 H70 M50 28 L72 50 L50 72" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// Gambar benda: binatang atau makanan
+const picSVG=(k,s)=>AN[k]?animalSVG(k,s):foodSVG(k,s);
+// Ukuran terbesar (min..max) agar n benda muat di area W x H
+function fitSize(n,W,H,max=150,min=96){
+  for(let s=max;s>min;s-=6){ const per=Math.max(1,Math.floor((W+10)/(s+10))); if(Math.ceil(n/per)*(s+10)<=H) return s; }
+  return min;
+}
+
+/* =========================================================
+   9. AYO BERHITUNG (1-5, lalu 1-10)
+   Bergantian: ketuk-hitung sendiri, lalu pilih angka yang cocok.
+   ========================================================= */
+function gameCount(){
+  scene('linear-gradient(#FFF3E0,#FFE0B2)');
+  const THINGS=['apel','pisang','wortel','bebek','kucing','trex','kelinci','singa'];
+  let round=0, last=0, hint=()=>{};
+  idleHint(()=>hint(),6000);
+  // Taruh n benda dalam area (string CSS posisi); min = ukuran terkecil benda
+  function things(n,k,area,min){
+    const box=el('div',`position:absolute;${area};display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:10px`);
+    stage.appendChild(box);
+    const r=box.getBoundingClientRect(), s=fitSize(n,r.width,r.height,150,min);
+    return [...Array(n)].map(()=>{ const it=el('div',`position:relative;width:${s}px;height:${s}px;cursor:pointer`,picSVG(k,s)); box.appendChild(it); anim(it,'popin'); return it; });
+  }
+  // Lencana angka di pojok benda yang sudah dihitung
+  function badge(it,num){
+    const b=el('div',`position:absolute;right:-6px;top:-6px;width:56px;height:56px;border-radius:50%;background:${COLORS[num%6]};border:4px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;pointer-events:none`,num);
+    b.className='big popin'; it.appendChild(b);
+  }
+  // Kartu angka: angka besar + titik sejumlah angka
+  function numCard(n,s){
+    const b=el('button',`position:relative;width:${s}px;height:${s*1.15}px;border-radius:28px;background:${COLORS[n%6]};flex-direction:column;gap:8px;padding:0`,
+      `<div class="big" style="font-size:${s*.5}px;color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.15)">${n}</div><div style="display:flex;flex-wrap:wrap;justify-content:center;width:80%;gap:4px">${'<i style="width:13px;height:13px;border-radius:50%;background:#fff"></i>'.repeat(n)}</div>`);
+    b.className='btn'; b.n=n; return b;
+  }
+  function next(){
+    stage.innerHTML=''; round++;
+    const max=round>6?10:5; let n; do n=1+Math.floor(Math.random()*max); while(n===last); last=n;
+    (round%2?countRound:pickRound)(n,rnd(THINGS),max);
+  }
+  // Mode 1: anak mengetuk tiap benda, angka diucapkan
+  function countRound(n,k){
+    const counter=el('div',`position:absolute;left:50%;top:14px;transform:translateX(-50%);width:110px;height:110px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:72px;color:#FF7043;box-shadow:0 6px 0 rgba(0,0,0,.1)`);
+    counter.className='big'; stage.appendChild(counter);
+    const items=things(n,k,'left:12px;right:12px;top:136px;bottom:16px');
+    let c=0;
+    items.forEach(it=>it.onpointerdown=()=>{
+      if(it.num){ anim(it.firstChild,'jiggle'); say(NUM[it.num]); return; }
+      if(c>=n) return;
+      it.num=++c; badge(it,c); anim(it.firstChild,'jump'); tone(SCALE[c-1],.2,'sine',.22); say(NUM[c],1.4,1);
+      counter.textContent=c; anim(counter,'popin');
+      if(c===n){
+        T(()=>{ say('ada '+NUM[n]+'!',1.5); items.forEach(i=>i.firstChild.classList.add('dance')); confetti(35); SFX.chime(); stars(...ctr(counter),14); },900);
+        T(next,3600);
+      }
+    });
+    hint=()=>hand(items.find(i=>!i.num));
+  }
+  // Mode 2: benda dihitung bersama, lalu anak memilih kartu angka
+  function pickRound(n,k,max){
+    const land=innerWidth>innerHeight;
+    const items=things(n,k,land?'left:24px;right:38%;top:100px;bottom:24px':`left:24px;right:24px;top:100px;bottom:${innerHeight*.36}px`,60); // benda hanya dilihat, boleh lebih kecil dari 96px
+    items.forEach(it=>it.onpointerdown=()=>{ anim(it.firstChild,'jiggle'); SFX.giggle(); });
+    items.forEach((it,i)=>T(()=>{ badge(it,i+1); anim(it.firstChild,'jump'); tone(SCALE[i],.2,'sine',.22); say(NUM[i+1],1.4,1); },600+i*800));
+    hint=()=>{};
+    T(()=>{
+      const cnt=max>5?3:2, opts=[n];
+      while(opts.length<cnt){ const o=1+Math.floor(Math.random()*max); if(!opts.includes(o)) opts.push(o); }
+      const wrap=el('div',`position:absolute;${land?'right:24px;top:90px;bottom:24px;width:34%;flex-direction:column':'left:24px;right:24px;bottom:24px;height:33%'};display:flex;justify-content:space-evenly;align-items:center`);
+      stage.appendChild(wrap);
+      const cs=Math.max(96,land?Math.min(150,(innerHeight-130)/cnt/1.25):Math.min(150,(innerWidth-60)/cnt-16,innerHeight*.3/1.2));
+      const q=()=>say('mana '+NUM[n]+'?',1.5);
+      let miss=0, done=false;
+      const cards=shuffle(opts).map(o=>{
+        const b=numCard(o,cs); wrap.appendChild(b); anim(b,'popin');
+        b.onpointerdown=()=>{
+          if(done) return;
+          if(o===n){
+            done=true; b.classList.remove('glow'); anim(b,'dance'); SFX.clap(); SFX.chime(); confetti(40); stars(...ctr(b),16);
+            say('pintar! '+NUM[n]+'!',1.6); items.forEach(i=>i.firstChild.classList.add('dance')); T(next,3200);
+          } else {
+            anim(b,'shake',900); SFX.tap(); T(q,300);
+            if(++miss>=2) cards.find(c=>c.n===n).classList.add('glow'); // bantuan
+          }
+        };
+        return b;
+      });
+      q(); hint=()=>{ q(); hand(cards.find(c=>c.n===n)); };
+    },600+n*800+200);
+  }
+  next();
+}
+
+/* =========================================================
+   10. AYO MEMBACA (kenal huruf + gambar)
+   Kenalan 3 huruf, lalu kuis "mana huruf ...?"
+   ========================================================= */
+function gameRead(){
+  scene('linear-gradient(#EDE7F6,#E1F5FE)');
+  // [huruf, cara baca, gambar, kata]
+  const ABC=[['A','a','anjing','anjing'],['B','be','bebek','bebek'],['D','de','trex','dino'],['G','ge','gajah','gajah'],['K','ka','kucing','kucing'],['M','em','monyet','monyet'],['P','pe','pisang','pisang'],['S','es','sapi','sapi'],['W','we','wortel','wortel']];
+  let idx=0, sinceQuiz=0, quizzes=0, seen=[], hint=()=>{};
+  idleHint(()=>hint(),6000);
+  // Kartu huruf besar "Aa"
+  function letterEl(it,s){
+    const c=['#FF5E7E','#4FC3F7','#7ED957','#B388FF','#FF8A65','#26A69A'][ABC.indexOf(it)%6];
+    const e=el('div',`position:relative;width:${s}px;height:${s}px;border-radius:${s*.2}px;background:#fff;border:6px solid ${c};color:${c};display:flex;align-items:center;justify-content:center;font-size:${s*.52}px;cursor:pointer;box-shadow:0 8px 0 rgba(0,0,0,.1)`,
+      `${it[0]}<span style="font-size:.62em;margin-left:5%">${it[0].toLowerCase()}</span>`);
+    e.className='big'; return e;
+  }
+  const picSound=it=>AN[it[2]]?animalSound(it[2],true):(SFX.boing(),say(it[3],1.5));
+  // Mode kenal huruf: ketuk huruf -> diucapkan + gambar muncul
+  function learn(){
+    stage.innerHTML='';
+    const it=ABC[idx]; idx=(idx+1)%ABC.length; if(!seen.includes(it)) seen.push(it);
+    const land=innerWidth>innerHeight, s=Math.max(150,Math.min(land?innerWidth*.34:innerWidth*.62, land?innerHeight*.6:innerHeight*.32, 300));
+    const wrap=el('div',`position:absolute;inset:90px 24px 140px;display:flex;flex-direction:${land?'row':'column'};align-items:center;justify-content:space-evenly`);
+    const le=letterEl(it,s), pic=el('div',`transform:scale(0);transition:transform .35s cubic-bezier(.3,1.6,.5,1);cursor:pointer`,picSVG(it[2],s*.9));
+    wrap.append(le,pic); stage.appendChild(wrap); anim(le,'popin');
+    const nextB=el('button',`right:24px;bottom:24px;width:110px;height:110px;background:#7ED957;display:none`,ARROW);
+    nextB.className='btn bob'; stage.appendChild(nextB);
+    let tapped=false;
+    T(()=>say(it[1],1.4),400);
+    le.onpointerdown=()=>{
+      tapped=true; anim(le,'jiggle'); SFX.chime(); stars(...ctr(le),12);
+      pic.style.transform='scale(1)'; anim(pic.firstChild,'jump');
+      say(`${it[1]}! ${it[1]}! ${it[3]}!`,1.4,.85); nextB.style.display='flex';
+    };
+    pic.onpointerdown=()=>{ if(tapped){ anim(pic.firstChild,'jump'); picSound(it); } };
+    nextB.onpointerdown=()=>{ SFX.pop(); if(++sinceQuiz>=3){ sinceQuiz=0; quiz(); } else learn(); };
+    hint=()=>hand(tapped?nextB:le);
+  }
+  // Kuis: dengar huruf, ketuk kartu yang benar
+  function quiz(){
+    stage.innerHTML=''; quizzes++;
+    const cnt=quizzes>2?3:2, target=rnd(seen.slice(-3)), opts=[target];
+    while(opts.length<cnt){ const o=rnd(ABC); if(!opts.includes(o)) opts.push(o); }
+    const land=innerWidth>innerHeight;
+    const s=Math.max(120,Math.min(land?(innerWidth-80)/cnt-30:innerWidth*.5, land?innerHeight*.5:(innerHeight-200)/cnt-30, 240));
+    const q=()=>say(`mana ${target[1]}? ${target[1]}, ${target[3]}`,1.5,.9);
+    const sp=el('button',`left:calc(50% - 55px);top:14px;width:110px;height:110px;background:#4FC3F7`,SPK);
+    sp.className='btn bob'; sp.onpointerdown=q; stage.appendChild(sp);
+    const row=el('div',`position:absolute;inset:140px 24px 24px;display:flex;flex-direction:${land?'row':'column'};align-items:center;justify-content:space-evenly`);
+    stage.appendChild(row);
+    let miss=0, done=false;
+    const cards=shuffle(opts).map(it=>{
+      const c=letterEl(it,s); c.it=it; row.appendChild(c); anim(c,'popin');
+      c.onpointerdown=()=>{
+        if(done) return;
+        if(it===target){
+          done=true; c.classList.remove('glow'); anim(c,'dance'); SFX.clap(); SFX.chime(); confetti(40); stars(...ctr(c),16);
+          // Gambar kata muncul di atas kartu
+          const p=el('div',`position:absolute;left:50%;top:-35%;transform:translateX(-50%);pointer-events:none`,picSVG(it[2],s*.6));
+          c.appendChild(p); anim(p.firstChild,'jump');
+          say(`pintar! ${it[1]}, ${it[3]}!`,1.6); T(learn,3400);
+        } else {
+          anim(c,'shake',900); T(q,300);
+          if(++miss>=2) cards.find(x=>x.it===target).classList.add('glow'); // bantuan
+        }
+      };
+      return c;
+    });
+    T(q,400);
+    hint=()=>{ q(); hand(miss?cards.find(x=>x.it===target):sp); };
+  }
+  learn();
 }
 
 showStart();
