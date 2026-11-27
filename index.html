@@ -2,7 +2,13 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<!-- PWA: dipasang ke layar utama = fullscreen + landscape -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FFC93C">
 <title>Dunia Dino Kecil</title>
 <style>
 /* ===== Dasar: cegah zoom, scroll, seleksi ===== */
@@ -15,12 +21,14 @@ svg{display:block;overflow:visible}
 .btn:active{transform:scale(.92)}
 .center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
 /* Tombol rumah orang tua */
-#home{position:fixed;left:14px;top:14px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.6);z-index:50;display:none;align-items:center;justify-content:center;touch-action:none}
+#home{position:fixed;left:max(14px,env(safe-area-inset-left));top:14px;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.6);z-index:50;display:none;align-items:center;justify-content:center;touch-action:none}
 #home svg.ring{position:absolute;inset:0}
 #home circle.prog{stroke-dasharray:189;stroke-dashoffset:189;transition:none}
 #home.hold circle.prog{stroke-dashoffset:0;transition:stroke-dashoffset 2s linear}
 /* Grid umum */
 .grid{position:absolute;inset:90px 24px 24px;display:grid;gap:18px;align-items:center;justify-items:center}
+/* Layar sangat kecil: rapatkan jarak */
+@media (max-height:380px),(max-width:600px){ .grid{gap:8px;inset:84px 10px 8px} }
 /* Animasi */
 @keyframes jump{0%,100%{transform:translateY(0)}30%{transform:translateY(-22%) scale(1.05,.95)}60%{transform:translateY(0) scale(1.05,.95)}}
 @keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
@@ -71,11 +79,22 @@ svg{display:block;overflow:visible}
 .glow{animation:glow 1s ease infinite}
 /* Huruf & angka besar membulat */
 .big{font-family:'Arial Rounded MT Bold','Nunito','Comic Sans MS','Chalkboard SE',sans-serif;font-weight:900;line-height:1}
+/* Layar "putar HP": hanya perangkat sentuh dalam posisi portrait */
+#rotate{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:linear-gradient(#bfe9ff,#e8fbd8)}
+@media (orientation:portrait) and (pointer:coarse){ #rotate{display:flex} }
+@keyframes turn{0%,20%{transform:rotate(0)}50%,80%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
+#rotate .ph{animation:turn 2.4s ease-in-out infinite;transform-origin:50% 50%}
 </style>
 </head>
 <body>
 <div id="sky"></div>
 <div id="stage"></div>
+<!-- Ajakan memutar HP ke landscape (tanpa teks) -->
+<div id="rotate"><svg width="220" height="220" viewBox="0 0 220 220">
+  <g class="ph"><rect x="70" y="30" width="80" height="150" rx="16" fill="#fff" stroke="#5C6BC0" stroke-width="8"/><circle cx="110" cy="160" r="7" fill="#5C6BC0"/>
+  <circle cx="98" cy="90" r="6" fill="#222"/><circle cx="122" cy="90" r="6" fill="#222"/><path d="M98 110 Q110 120 122 110" stroke="#222" stroke-width="4" fill="none" stroke-linecap="round"/></g>
+  <path d="M40 150 A80 80 0 0 1 60 50" stroke="#FF8A65" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M48 46 L62 48 L60 62" stroke="#FF8A65" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg></div>
 <!-- Tombol rumah: tahan 2 detik -->
 <div id="home">
   <svg class="ring" viewBox="0 0 64 64"><circle class="prog" cx="32" cy="32" r="30" fill="none" stroke="#ff7043" stroke-width="4" transform="rotate(-90 32 32)"/></svg>
@@ -321,6 +340,7 @@ function scene(bg){ clearAll(); stage.innerHTML=''; document.body.style.backgrou
 
 // Layar awal: satu tombol "mulai" bergambar (segitiga play + dino)
 function showStart(){
+  curScene=showStart;
   scene('linear-gradient(#bfe9ff,#e8fbd8)'); home.style.display='none';
   const s=Math.min(vmin()*.55,300);
   const b=el('button',`width:${s}px;height:${s}px;background:#FFC93C;border-radius:50%`,
@@ -330,8 +350,7 @@ function showStart(){
   d.className='';
   b.onclick=()=>{
     audioInit(); BGM.start(); SFX.chime(); say('halo! ayo main!');
-    // Layar penuh + layar tetap menyala, agar anak tidak menyentuh UI browser
-    try{ document.documentElement.requestFullscreen?.().catch(()=>{}); }catch(e){}
+    goLandscape();
     try{ navigator.wakeLock?.request('screen').catch(()=>{}); }catch(e){}
     showMenu();
   };
@@ -356,20 +375,43 @@ const GAMES=[
 ];
 function iconBox(bg,inner){return `<div style="width:100%;height:100%;border-radius:28px;background:${bg};display:flex;align-items:center;justify-content:center;box-shadow:0 8px 0 rgba(0,0,0,.12)">${inner}</div>`;}
 function showMenu(){
+  curScene=showMenu;
   scene('linear-gradient(#bfe9ff,#e8fbd8)'); home.style.display='none';
   const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
-  g.style.cssText+=`inset:24px;grid-template-columns:repeat(${land?5:2},1fr);grid-template-rows:repeat(${land?2:5},1fr)`;
+  g.style.cssText+=`inset:${innerWidth<640?10:24}px;grid-template-columns:repeat(${land?5:2},1fr);grid-template-rows:repeat(${land?2:5},1fr)`;
   const sz=Math.max(96,Math.min(land?innerWidth/6.2:innerWidth/2.6, land?innerHeight/2.7:innerHeight/6.6));
   GAMES.forEach((G,i)=>{
     const b=el('button',`position:relative;width:${sz}px;height:${sz}px;border:none;background:none;padding:0;cursor:pointer`,G.ic());
     b.onpointerdown=()=>{ SFX.pop(); anim(b.firstChild,'jiggle',600); };
-    b.onclick=()=>{ T(()=>{ scene(); home.style.display='flex'; G.run(); },250); };
+    b.onclick=()=>{ T(()=>{ curScene=G.run; scene(); home.style.display='flex'; G.run(); },250); };
     // Ikon melayang pelan bergantian agar mengundang disentuh
     b.className='bob'; b.style.animationDelay=(i*.3)+'s'; g.appendChild(b);
   });
   stage.appendChild(g);
 }
-addEventListener('resize',()=>{ if(home.style.display==='none' && stage.querySelector('.grid')) showMenu(); });
+/* ===== Responsif & landscape =====
+   Layout dihitung dari ukuran layar saat scene dibuat, jadi scene digambar ulang
+   bila ukuran berubah nyata (putar layar, masuk fullscreen, jendela diubah).
+   ponytail: gambar ulang = ronde mini-game mulai lagi; simpan state per game jika mengganggu. */
+let curScene=null, rzT=null, lastW=innerWidth, lastH=innerHeight;
+addEventListener('resize',()=>{
+  clearTimeout(rzT);
+  rzT=setTimeout(()=>{
+    const w=innerWidth, h=innerHeight;
+    // Abaikan perubahan kecil (bilah alamat HP muncul/hilang) agar game tidak ter-reset
+    const big=(w>h)!==(lastW>lastH) || Math.abs(w-lastW)/lastW>.1 || Math.abs(h-lastH)/lastH>.15;
+    if(!big && curScene!==showMenu && curScene!==showStart) return;
+    lastW=w; lastH=h; if(curScene) curScene();
+  },250);
+});
+// Fullscreen + kunci landscape (Android Chrome). iOS tidak mendukung: andalkan layar "putar HP".
+async function goLandscape(){
+  const d=document.documentElement;
+  try{ if(!document.fullscreenElement && d.requestFullscreen) await d.requestFullscreen({navigationUI:'hide'}); }catch(e){}
+  try{ await screen.orientation.lock('landscape'); }catch(e){}
+}
+// Ketuk layar "putar HP" juga mencoba mengunci landscape otomatis
+document.getElementById('rotate').addEventListener('pointerdown',e=>{ e.stopPropagation(); goLandscape(); },true);
 
 /* Gambar pendukung bersama */
 function eggSVG(s,cracks){
@@ -397,7 +439,7 @@ function gameZoo(){
   scene('linear-gradient(#bfe9ff 40%,#9ee07a 40%)');
   const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
   g.style.cssText+=`grid-template-columns:repeat(${land?3:2},1fr)`;
-  const s=Math.max(110,Math.min(land?innerWidth/4.2:innerWidth/2.6,land?innerHeight/3:innerHeight/4.5));
+  const s=Math.max(96,Math.min(land?innerWidth/4.2:innerWidth/2.6,land?(innerHeight-100)/2.15:innerHeight/4.5));
   const zooA=['singa','gajah','bebek','kucing','sapi','monyet'];
   let last=null; const boxes=[];
   for(let i=0;i<6;i++){
@@ -628,8 +670,11 @@ function gameColor(){
   idleHint(()=>{ const w=[...box.querySelectorAll('.rg')].find(r=>!r.dataset.c); if(w) hand(w); },7000);
   let cur=PAL[0], brush=false, kind='trex';
   const vb=[0,0,240,260];
-  const svgW=Math.min(innerWidth*.9,innerHeight*.55);
-  const box=el('div',`position:absolute;left:50%;top:44%;transform:translate(-50%,-50%)`); stage.appendChild(box);
+  // Layar pendek (HP landscape): alat di kiri, warna di kanan (2x3), dino di tengah, bintang di bawahnya
+  const short=innerWidth>innerHeight && innerHeight<560, U=96, G=8;
+  const cw=innerWidth-2*(14+2*U+G)-16;
+  const svgW=short?Math.min(cw,(innerHeight-U-30)/1.08):Math.min(innerWidth*.9,innerHeight*.55);
+  const box=el('div',short?`position:absolute;left:50%;top:8px;transform:translateX(-50%)`:`position:absolute;left:50%;top:44%;transform:translate(-50%,-50%)`); stage.appendChild(box);
   function draw(){
     const regions=SHAPES[kind].map(([n,[cx,cy,rx,ry,r]])=>`<ellipse class="rg" data-n="${n}" cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${r} ${cx} ${cy})" fill="#fff" stroke="#444" stroke-width="4"/>`).join('');
     const head=SHAPES[kind].find(s=>s[0]==='kepala')[1];
@@ -673,6 +718,18 @@ function gameColor(){
   ['trex','tri','brachio'].forEach(k=>{ const b=el('button',`position:relative;width:96px;height:96px;background:#fff;padding:0`,animalSVG(k,80)); b.className='btn'; b.onclick=()=>{ kind=k; draw(); SFX.chime(); }; pick.appendChild(b); });
   if(innerWidth<560) pick.style.cssText+='flex-direction:column;left:14px;top:96px';
   stage.appendChild(pick);
+  // Susun ulang posisi tombol untuk layar pendek
+  if(short){
+    const at=(b,x,y,right)=>{ b.style.cssText+=`position:absolute;width:${U}px;height:${U}px;top:${y}px;${right?'right':'left'}:${x}px;transform:none`; };
+    bar.style.cssText='position:absolute;inset:0;pointer-events:none'; side.style.cssText=bar.style.cssText; pick.style.cssText=bar.style.cssText;
+    [bar,side,pick].forEach(p=>[...p.children].forEach(b=>b.style.pointerEvents='auto'));
+    sw.forEach((b,i)=>at(b,14+(i%2)*(U+G),14+Math.floor(i/2)*(U+G),true));      // warna 2x3 kanan
+    [...pick.children].forEach((b,i)=>at(b,14+U+G,14+i*(U+G)));                   // 3 dino, kolom kiri ke-2
+    const [bru,star,tis]=side.children;
+    at(bru,14,14+U+G); at(tis,14,14+2*(U+G));                                      // kolom kiri ke-1 (di bawah tombol rumah)
+    star.style.cssText+=`position:absolute;width:${U}px;height:${U}px;left:calc(50% - ${U/2}px);bottom:10px`; // bawah tengah
+    sw[0].style.transform='scale(1.12)';
+  }
   draw();
 }
 
@@ -683,7 +740,7 @@ function gamePeek(){
   scene('linear-gradient(#FFE0B2,#FFCC80)');
   const land=innerWidth>innerHeight, g=el('div'); g.className='grid';
   g.style.cssText+=`grid-template-columns:repeat(${land?3:2},1fr)`;
-  const w=Math.max(110,Math.min(land?innerWidth/4.5:innerWidth/2.8,land?innerHeight/3:innerHeight/4.6));
+  const w=Math.max(96,Math.min(land?innerWidth/4.5:innerWidth/2.8,land?(innerHeight-110)/2.35:innerHeight/4.6));
   const DC=['#E57373','#64B5F6','#81C784','#FFD54F','#BA68C8','#4DD0E1'];
   let cnt=0, last=null; const doors=[];
   DC.forEach(c=>{
