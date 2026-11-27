@@ -1,0 +1,15 @@
+Sumber: freesound.org, semua lisensi Creative Commons 0 (public domain, tanpa atribusi wajib).
+Diolah: dipotong, fade-out, loudnorm -16 LUFS, mono 64kbps.
+
+singa.mp3  <- "poujade_eva_2020_2021_RoarOfLion(son2).wav" oleh iut_Paris8  https://freesound.org/people/iut_Paris8/sounds/567803/
+gajah.mp3  <- "Elephant Trumpets Growls.flac" oleh D.jones  https://freesound.org/people/D.jones/sounds/527845/
+bebek.mp3  <- "Duck quacking.mp3" oleh DigPro120  https://freesound.org/people/DigPro120/sounds/558858/
+kucing.mp3  <- "cat meow" oleh tuberatanka  https://freesound.org/people/tuberatanka/sounds/110011/
+sapi.mp3  <- "Cow Moo" oleh invertedturtle  https://freesound.org/people/invertedturtle/sounds/546481/
+monyet.mp3  <- "monkey2.wav" oleh Radio_fragola_gorizia  https://freesound.org/people/Radio_fragola_gorizia/sounds/400087/
+kelinci.mp3  <- "Guineapig" oleh RICHERlandTV  https://freesound.org/people/RICHERlandTV/sounds/435748/
+anjing.mp3  <- "Puppy Bark" oleh AntumDeluge  https://freesound.org/people/AntumDeluge/sounds/583142/
+trex.mp3  <- "trexroar.wav" oleh Opticreep  https://freesound.org/people/Opticreep/sounds/255405/
+tri.mp3  <- "Dino Growl" oleh Alessandrobraz  https://freesound.org/people/Alessandrobraz/sounds/727775/
+brachio.mp3  <- "Dinosaur call" oleh Alessandrobraz  https://freesound.org/people/Alessandrobraz/sounds/708641/
+stego.mp3  <- "Dino Hiss Dragon Roar" oleh 999999990  https://freesound.org/people/999999990/sounds/320345/

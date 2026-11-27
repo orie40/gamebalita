@@ -243,7 +243,14 @@ function animalSVG(k,size=160,o={}){
 }
 // Suara binatang: nada lucu + ucapan
 // withName=true: ucapkan nama dulu ("sapi! mooo") untuk belajar kata
-function animalSound(k,withName){ SFX.boing(); setTimeout(()=>say((withName?AN[k].n+'! ':'')+AN[k].snd,1.5),120); }
+// Suara asli (sounds/*.mp3, CC0). <audio> dipakai agar jalan juga di file://; gagal muat → tiruan suara via TTS
+const SND={}; ALL.forEach(k=>{ const a=new Audio(`sounds/${k}.mp3`); a.preload='auto'; SND[k]=a; });
+function animalSound(k,withName){
+  const a=SND[k], tts=()=>setTimeout(()=>say((withName?AN[k].n+'! ':'')+AN[k].snd,1.5),120);
+  if(!a||a.error){ SFX.boing(); return tts(); }
+  BGM.duck(3000); a.pause(); a.currentTime=0;
+  a.play().then(()=>{ if(withName) setTimeout(()=>say(AN[k].n,1.5),(a.duration||1.5)*1000); }).catch(()=>{ SFX.boing(); tts(); });
+}
 
 /* =========================================================
    UTILITAS BERSAMA: timer terkelola, efek bintang, drag
@@ -251,7 +258,7 @@ function animalSound(k,withName){ SFX.boing(); setTimeout(()=>say((withName?AN[k
 let timers=[], rafs=[], cleanups=[], lastTouch=Date.now();
 const T=(fn,ms)=>{const id=setTimeout(fn,ms);timers.push(id);return id;};
 const I=(fn,ms)=>{const id=setInterval(fn,ms);timers.push(id);return id;};
-function clearAll(){ timers.forEach(id=>{clearTimeout(id);clearInterval(id);}); rafs.forEach(cancelAnimationFrame); cleanups.forEach(f=>f()); timers=[];rafs=[];cleanups=[]; if(window.speechSynthesis) speechSynthesis.cancel(); }
+function clearAll(){ timers.forEach(id=>{clearTimeout(id);clearInterval(id);}); rafs.forEach(cancelAnimationFrame); cleanups.forEach(f=>f()); timers=[];rafs=[];cleanups=[]; if(window.speechSynthesis) speechSynthesis.cancel(); Object.values(SND).forEach(a=>a.pause()); }
 const stage=document.getElementById('stage');
 function el(tag,css,html){const e=document.createElement(tag);if(css)e.style.cssText=css;if(html!=null)e.innerHTML=html;return e;}
 // Animasi ulang (restart class)
